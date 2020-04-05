@@ -36,7 +36,8 @@ namespace OpenRA.Network
 		public bool AuthenticationFailed = false;
 		public ExternalMod ServerExternalMod = null;
 
-		public bool IsNetTick { get { return LocalFrameNumber % Game.NetTickScale == 0; } }
+		public int NetTickScale = Game.DefaultNetTickScale;
+		public bool IsNetTick { get { return LocalFrameNumber % NetTickScale == 0; } }
 		public int NetFrameNumber { get; private set; }
 		public int LocalFrameNumber;
 		public int FramesAhead = 0;
@@ -63,7 +64,7 @@ namespace OpenRA.Network
 
 		void OutOfSync(int frame)
 		{
-			syncReport.DumpSyncReport(frame, frameData.OrdersForFrame(World, frame));
+			syncReport.DumpSyncReport(frame);
 			throw new InvalidOperationException("Out of sync in frame {0}.\n Compare syncreport.log with other players.".F(frame));
 		}
 
@@ -72,13 +73,24 @@ namespace OpenRA.Network
 			if (GameStarted)
 				return;
 
+			// HACK: Need to add local client for shellmap
+			frameData.AddClient(Connection.LocalClientId);
+			foreach (var client in LobbyInfo.Clients)
+				if (client.Index != Connection.LocalClientId)
+					frameData.AddClient(client.Index);
+
 			// Generating sync reports is expensive, so only do it if we have
 			// other players to compare against if a desync did occur
 			generateSyncReport = !(Connection is ReplayConnection) && LobbyInfo.GlobalSettings.EnableSyncReports;
 
 			NetFrameNumber = 1;
 
+			// HACK: FramesAhead is only ever 0 in singleplayer, so we increase the rate of apparent net ticks to decrease latency
+			if (FramesAhead == 0)
+				NetTickScale = 1;
+
 			// Technically redundant since we will attempt to send orders before the next frame
+			// but gets our framesahead orders out sooner
 			SendOrders();
 		}
 
@@ -127,13 +139,13 @@ namespace OpenRA.Network
 				{
 					var frame = BitConverter.ToInt32(packet, 0);
 					if (packet.Length == 5 && packet[4] == (byte)OrderType.Disconnect)
-						frameData.ClientQuit(clientId, frame);
+						frameData.ClientQuit(clientId);
 					else if (packet.Length >= 5 && packet[4] == (byte)OrderType.SyncHash)
 						CheckSync(packet);
 					else if (frame == 0)
 						receivedImmediateOrders.Add(Pair.New(clientId, packet));
 					else
-						frameData.AddFrameOrders(clientId, frame, packet);
+						frameData.AddFrameOrders(clientId, packet);
 				});
 		}
 
@@ -178,7 +190,7 @@ namespace OpenRA.Network
 			get
 			{
 				return NetFrameNumber >= 1
-					? frameData.ClientsNotReadyForFrame(NetFrameNumber)
+					? frameData.ClientsNotReadyForFrame()
 						.Select(a => LobbyInfo.ClientWithIndex(a))
 					: NoClients;
 			}
@@ -206,8 +218,11 @@ namespace OpenRA.Network
 		 */
 		void ProcessOrders()
 		{
-			foreach (var order in frameData.OrdersForFrame(World, NetFrameNumber))
+			var orders = frameData.OrdersForFrame(World).ToList();
+			foreach (var order in orders)
+			{
 				UnitOrders.ProcessOrder(this, World, order.Client, order.Order);
+			}
 
 			if (NetFrameNumber + FramesAhead >= GameSaveLastSyncFrame)
 				Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(World.SyncHash()));
@@ -216,7 +231,7 @@ namespace OpenRA.Network
 
 			if (generateSyncReport)
 				using (new PerfSample("sync_report"))
-					syncReport.UpdateSyncReport();
+					syncReport.UpdateSyncReport(orders);
 
 			++NetFrameNumber;
 		}
@@ -256,7 +271,7 @@ namespace OpenRA.Network
 			var willTick = shouldTick;
 			if (willTick && IsNetTick)
 			{
-				willTick = frameData.IsReadyForFrame(NetFrameNumber);
+				willTick = frameData.IsReadyForFrame();
 				if (willTick)
 					ProcessOrders();
 			}
