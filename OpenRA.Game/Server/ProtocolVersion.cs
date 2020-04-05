@@ -34,6 +34,11 @@ namespace OpenRA.Server
 		//   - OrderFields enum encoded as a byte: specifies the data included in the rest of the order
 		//   - Order-specific data - see OpenRA.Game/Server/Order.cs for details
 		//
+		// When the frame of a packet is 0, it is an immediate order, and may or may not be relayed to clients e.g. chat
+		//
+		// When the frame is not 0, it will always be relayed to all clients
+		// and a blank packet sent to the sender to act as an ack (used by adaptive order latency)
+		//
 		// A connection handshake begins when a client opens a connection to the server:
 		// - Server sends:
 		//   - Int32 specifying the handshake protocol version
@@ -66,6 +71,6 @@ namespace OpenRA.Server
 		// The protocol for server and world orders
 		// This applies after the handshake has completed, and is provided to support
 		// alternative server implementations that wish to support multiple versions in parallel
-		public const int Orders = 10;
+		public const int Orders = 11;
 	}
 }

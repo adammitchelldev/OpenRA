@@ -72,5 +72,10 @@ namespace OpenRA.Network
 				.SelectMany(x => framePackets[x].Dequeue().ToOrderList(world)
 					.Select(y => new ClientOrder { Client = x, Order = y }));
 		}
+
+		public int BufferSizeForClient(int client)
+		{
+			return framePackets[client].Count;
+		}
 	}
 }

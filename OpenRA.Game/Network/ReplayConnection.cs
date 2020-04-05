@@ -38,6 +38,11 @@ namespace OpenRA.Network
 		public readonly Session LobbyInfo;
 		public readonly string Filename;
 
+		public ILatencyReporter LatencyReporter
+		{
+			get { return EmptyLatencyReporter.Instance; }
+		}
+
 		public ReplayConnection(string replayFilename)
 		{
 			Filename = replayFilename;
@@ -114,11 +119,11 @@ namespace OpenRA.Network
 				}
 			}
 
-			ordersFrame = LobbyInfo.GlobalSettings.OrderLatency;
+			ordersFrame = LobbyInfo.GlobalSettings.OrderLatency; // TODO Fix when adaptive order latency is on
 		}
 
 		// Do nothing: ignore locally generated orders
-		public void Send(int frame, List<byte[]> orders) { }
+		public void Send(int frame, IEnumerable<byte[]> orders) { }
 		public void SendImmediate(IEnumerable<byte[]> orders) { }
 
 		// TODO: Fix this HACK
@@ -152,6 +157,11 @@ namespace OpenRA.Network
 				foreach (var client in LobbyInfo.Clients)
 					packetFn(client.Index, disconnectPacket);
 			}
+		}
+
+		public int LastAckedFrame
+		{
+			get { return ordersFrame;  }
 		}
 
 		public void Dispose() { }

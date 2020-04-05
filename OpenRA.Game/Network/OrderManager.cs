@@ -40,8 +40,14 @@ namespace OpenRA.Network
 		public bool IsNetTick { get { return LocalFrameNumber % NetTickScale == 0; } }
 		public int NetFrameNumber { get; private set; }
 		public int LocalFrameNumber;
-		public int FramesAhead = 0;
-		int lastFrameSent;
+		public int NextReceivedNetFrame { get; private set; }
+		public int NextSafeNetFrame { get; private set; }
+
+		public int SyncFrameScale = 30; // TODO make this based on actual time, I would suggest once per second
+
+		public int OrderLatency; // Set during lobby by a "SyncInfo" packet, see UnitOrders
+		public int NextOrderFrame;
+		public bool IsCatchingUp { get; private set; }
 
 		public long LastTickTime = Game.RunTime;
 
@@ -84,9 +90,12 @@ namespace OpenRA.Network
 			generateSyncReport = !(Connection is ReplayConnection) && LobbyInfo.GlobalSettings.EnableSyncReports;
 
 			NetFrameNumber = 1;
+			NextOrderFrame = 1;
+
+			NetHistory.Restart(Connection.LocalClientId);
 
 			// HACK: FramesAhead is only ever 0 in singleplayer, so we increase the rate of apparent net ticks to decrease latency
-			if (FramesAhead == 0)
+			if (OrderLatency == 0)
 				NetTickScale = 1;
 
 			// Technically redundant since we will attempt to send orders before the next frame
@@ -185,6 +194,38 @@ namespace OpenRA.Network
 				syncForFrame.Add(frame, packet);
 		}
 
+		void CompensateForLatency()
+		{
+			if (Connection.LatencyReporter.IsLocal)
+			{
+				NextSafeNetFrame = NetFrameNumber;
+				return;
+			}
+
+			var realLatency = Connection.LatencyReporter.Latency;
+			var jitter = Connection.LatencyReporter.PeakJitter;
+
+			var msPerNetFrame = World.Timestep * Game.NetTickScale;
+
+			// Calculate catchup: we want to have enough frames in the incoming buffer to deal with peak jitter
+			var targetIncomingBuffer = (int)Math.Round((double)jitter / msPerNetFrame);
+
+			var lastAck = Connection.LastAckedFrame;
+
+			// Our orders exist in FrameData even if they aren't acked :/
+			// NextSafeNetFrame = Math.Min(lastAck - targetIncomingBuffer, NextReceivedNetFrame);
+			// TODO: Add a new latency measure
+			NextSafeNetFrame = NextReceivedNetFrame;
+
+			var catchUpNetFrames = NextSafeNetFrame - NetFrameNumber;
+			if (catchUpNetFrames < 0)
+				catchUpNetFrames = 0;
+
+			IsCatchingUp = catchUpNetFrames > 0;
+
+			BufferNetHistory(realLatency, jitter, catchUpNetFrames);
+		}
+
 		IEnumerable<Session.Client> GetClientsNotReadyForNextFrame
 		{
 			get
@@ -203,12 +244,23 @@ namespace OpenRA.Network
 
 			// Loop exists to ensure we never miss a frame, since that would stall the game.
 			// This loop also sends the initial blank frames to get to the correct order latency.
-			while (lastFrameSent < NetFrameNumber + FramesAhead)
+			// while (lastFrameSent < NetFrameNumber + FramesAhead)
+			// {
+			// 	lastFrameSent++;
+			// 	if (GameSaveLastFrame < NetFrameNumber + FramesAhead)
+			// 		Connection.Send(lastFrameSent, localOrders.Select(o => o.Serialize()).ToList());
+			// 	localOrders.Clear();
+			// }
+
+			if (localOrders.Count > 0)
 			{
-				lastFrameSent++;
-				if (GameSaveLastFrame < NetFrameNumber + FramesAhead)
-					Connection.Send(lastFrameSent, localOrders.Select(o => o.Serialize()).ToList());
-				localOrders.Clear();
+				if (GameSaveLastFrame < NextOrderFrame)
+				{
+					Connection.Send(NextOrderFrame, localOrders.Select(o => o.Serialize()).ToList());
+					localOrders.Clear();
+				}
+
+				NextOrderFrame++;
 			}
 		}
 
@@ -224,14 +276,17 @@ namespace OpenRA.Network
 				UnitOrders.ProcessOrder(this, World, order.Client, order.Order);
 			}
 
-			if (NetFrameNumber + FramesAhead >= GameSaveLastSyncFrame)
-				Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(World.SyncHash()));
-			else
-				Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(0));
+			if (NetFrameNumber % SyncFrameScale == 0)
+			{
+				if (NetFrameNumber >= GameSaveLastSyncFrame)
+					Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(World.SyncHash()));
+				else
+					Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(0));
 
-			if (generateSyncReport)
-				using (new PerfSample("sync_report"))
-					syncReport.UpdateSyncReport(orders);
+				if (generateSyncReport)
+					using (new PerfSample("sync_report"))
+						syncReport.UpdateSyncReport(orders);
+			}
 
 			++NetFrameNumber;
 		}
@@ -280,6 +335,17 @@ namespace OpenRA.Network
 				LocalFrameNumber++;
 
 			return willTick;
+		}
+
+		public void BufferNetHistory(int latency, int peakJitter, int catchUpNetFrames)
+		{
+			var buffers = new Dictionary<int, int>();
+
+			foreach (var c in frameData.ClientsPlayingInFrame(NetFrameNumber))
+				buffers.Add(c, frameData.BufferSizeForClient(NetFrameNumber, c));
+
+			NetHistory.Tick(new NetHistoryFrame(NetFrameNumber, NetFrameNumber <= NextSafeNetFrame, catchUpNetFrames, buffers,
+				latency, Connection.LatencyReporter.Jitter, peakJitter));
 		}
 
 		public void Dispose()
