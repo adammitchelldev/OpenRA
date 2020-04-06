@@ -599,8 +599,6 @@ namespace OpenRA
 						world.OrderGenerator.Tick(world);
 					});
 
-					Console.WriteLine("LastTickTime: {0}, delta: {1}", orderManager.LastTickTime, integralTickTimestep >= TimestepJankThreshold ? integralTickTimestep : worldTimestep);
-
 					if (orderManager.TryTick())
 					{
 						Log.Write("debug", "--Tick: {0} ({1})", LocalTick, orderManager.IsNetTick ? "net" : "local");

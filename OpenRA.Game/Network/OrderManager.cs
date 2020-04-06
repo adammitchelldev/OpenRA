@@ -312,7 +312,6 @@ namespace OpenRA.Network
 			if (willTick)
 				LocalFrameNumber++;
 
-			Console.WriteLine("Will tick: {0}", willTick);
 			return willTick;
 		}
 
