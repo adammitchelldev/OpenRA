@@ -630,7 +630,7 @@ namespace OpenRA.Server
 				if (GameSave != null)
 					GameSave.DispatchOrders(conn, frame, data);
 			}
-			else if (conn != null && (data.Length == 0 || (OrderType)data[0] == OrderType.SyncHash))
+			else if (conn != null && data.Length != 0 && (OrderType)data[0] == OrderType.SyncHash)
 			{
 				// TODO: Find a less hacky way to deal with synchash relaying
 				DispatchOrdersToOtherClients(conn, frame, data);

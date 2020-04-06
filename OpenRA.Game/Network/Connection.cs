@@ -12,6 +12,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net.Sockets;
@@ -37,8 +38,6 @@ namespace OpenRA.Network
 		void SendImmediate(IEnumerable<byte[]> orders);
 		void SendSync(int frame, byte[] syncData);
 		void Receive(Action<int, byte[]> packetFn);
-		int LastAckedFrame { get; }
-		ILatencyReporter LatencyReporter { get; }
 	}
 
 	class EchoConnection : IConnection
@@ -52,11 +51,6 @@ namespace OpenRA.Network
 		readonly List<ReceivedPacket> receivedPackets = new List<ReceivedPacket>();
 		public ReplayRecorder Recorder { get; private set; }
 
-		public virtual ILatencyReporter LatencyReporter
-		{
-			get { return EmptyLatencyReporter.Instance; }
-		}
-
 		public virtual int LocalClientId
 		{
 			get { return 1; }
@@ -67,8 +61,6 @@ namespace OpenRA.Network
 			get { return ConnectionState.PreConnecting; }
 		}
 
-		public int LastAckedFrame { get; protected set; }
-
 		public virtual void Send(int frame, IEnumerable<byte[]> orders)
 		{
 			var ms = new MemoryStream();
@@ -76,7 +68,6 @@ namespace OpenRA.Network
 			foreach (var o in orders)
 				ms.WriteArray(o);
 			Send(ms.ToArray());
-			LastAckedFrame = frame;
 		}
 
 		public virtual void SendImmediate(IEnumerable<byte[]> orders)
@@ -154,17 +145,10 @@ namespace OpenRA.Network
 	{
 		readonly TcpClient tcp;
 		readonly List<byte[]> queuedSyncPackets = new List<byte[]>();
-		readonly ConcurrentQueue<Pair<int, byte[]>> awaitingAckPackets = new ConcurrentQueue<Pair<int, byte[]>>();
+		readonly ConcurrentQueue<byte[]> awaitingAckPackets = new ConcurrentQueue<byte[]>();
 		volatile ConnectionState connectionState = ConnectionState.Connecting;
 		volatile int clientId;
 		bool disposed;
-
-		readonly OrderLatencyTracker latencyTracker = new OrderLatencyTracker();
-
-		public override ILatencyReporter LatencyReporter
-		{
-			get { return latencyTracker; }
-		}
 
 		public NetworkConnection(string host, int port)
 		{
@@ -229,23 +213,18 @@ namespace OpenRA.Network
 			reader.ReadByte();
 			var framesToAck = reader.ReadInt16();
 
-			LastAckedFrame += framesToAck;
-
 			var ms = new MemoryStream();
 			ms.WriteArray(BitConverter.GetBytes(frameReceived));
 
 			for (int i = 0; i < framesToAck; i++)
 			{
-				Pair<int, byte[]> queuedPacket;
+				byte[] queuedPacket;
 				if (!awaitingAckPackets.TryDequeue(out queuedPacket))
 				{
 					throw new InvalidOperationException("Received acks for unknown frames");
 				}
 
-				var queuedFrame = queuedPacket.First;
-				latencyTracker.TrackAck(queuedFrame);
-
-				ms.WriteArray(queuedPacket.Second);
+				ms.WriteArray(queuedPacket);
 			}
 
 			AddPacket(new ReceivedPacket { FromClient = LocalClientId, Data = ms.ToArray() });
@@ -266,51 +245,71 @@ namespace OpenRA.Network
 		// Override send frame orders so we can hold them until ACK'ed
 		public override void Send(int frame, IEnumerable<byte[]> orders)
 		{
-			var ackMs = new MemoryStream();
-			var enumerable = orders as byte[][] ?? orders.ToArray();
-			foreach (var o in enumerable)
-				ackMs.WriteArray(o);
-
-			awaitingAckPackets.Enqueue(new Pair<int, byte[]>(frame, ackMs.ToArray())); // TODO fix having to write byte buffer twice
-
 			var ms = new MemoryStream();
-			ms.WriteArray(BitConverter.GetBytes(frame));
-			foreach (var o in enumerable)
-				ms.WriteArray(o);
-			byte[] packet = ms.ToArray();
 
-			latencyTracker.TrackSend(frame);
-			SendNetwork(packet);
+			var ordersArray = orders as byte[][] ?? orders.ToArray();
+
+			if (ordersArray.Length > 0)
+			{
+				// Write our packet to be acked
+				var ackMs = new MemoryStream();
+				foreach (var o in ordersArray)
+				{
+					ackMs.WriteArray(o);
+				}
+
+				var ackArray = ackMs.ToArray();
+
+				awaitingAckPackets.Enqueue(ackArray); // TODO fix having to write byte buffer twice
+
+				// Write our packet to send to the main memory stream
+				ms.WriteArray(BitConverter.GetBytes(ackArray.Length + 4));
+				ms.WriteArray(BitConverter.GetBytes(frame)); // TODO: Remove frames from send protocol
+				ms.WriteArray(ackArray);
+			}
+
+			WriteQueuedSyncPackets(ms);
+			SendNetwork(ms);
 		}
 
 		protected override void Send(byte[] packet)
 		{
 			base.Send(packet);
-			SendNetwork(packet);
+
+			var ms = new MemoryStream();
+			WriteOrderPacket(ms, packet);
+			WriteQueuedSyncPackets(ms);
+			SendNetwork(ms);
 		}
 
-		void SendNetwork(byte[] packet)
+		void SendNetwork(MemoryStream ms)
 		{
 			try
 			{
-				var ms = new MemoryStream();
-				ms.WriteArray(BitConverter.GetBytes(packet.Length));
-				ms.WriteArray(packet);
-
-				foreach (var q in queuedSyncPackets)
-				{
-					ms.WriteArray(BitConverter.GetBytes(q.Length));
-					ms.WriteArray(q);
-					base.Send(q);
-				}
-
-				queuedSyncPackets.Clear();
 				ms.WriteTo(tcp.GetStream());
 			}
 			catch (SocketException) { /* drop this on the floor; we'll pick up the disconnect from the reader thread */ }
 			catch (ObjectDisposedException) { /* ditto */ }
 			catch (InvalidOperationException) { /* ditto */ }
 			catch (IOException) { /* ditto */ }
+		}
+
+		void WriteOrderPacket(MemoryStream ms, byte[] packet)
+		{
+			ms.WriteArray(BitConverter.GetBytes(packet.Length));
+			ms.WriteArray(packet);
+		}
+
+		void WriteQueuedSyncPackets(MemoryStream ms)
+		{
+			foreach (var q in queuedSyncPackets)
+			{
+				ms.WriteArray(BitConverter.GetBytes(q.Length));
+				ms.WriteArray(q);
+				base.Send(q);
+			}
+
+			queuedSyncPackets.Clear();
 		}
 
 		protected override void Dispose(bool disposing)

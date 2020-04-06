@@ -30,7 +30,7 @@ namespace OpenRA
 {
 	public static class Game
 	{
-		public const int DefaultNetTickScale = 1; // 120 ms net tick for 40 ms local tick
+		public const int DefaultNetTickScale = 3; // 120 ms net tick for 40 ms local tick
 		public const int Timestep = 40;
 		public const int TimestepJankThreshold = 250; // Don't catch up for delays larger than 250ms
 
@@ -567,8 +567,10 @@ namespace OpenRA
 			int worldTimestep;
 			if (world == null)
 				worldTimestep = Timestep;
-			else if (world.IsLoadingGameSave || orderManager.IsCatchingUp)
+			else if (world.IsLoadingGameSave)
 				worldTimestep = 1;
+			else if (orderManager.IsCatchingUp)
+				worldTimestep = Timestep / 4;
 			else
 				worldTimestep = world.Timestep;
 			var worldTickDelta = tick - orderManager.LastTickTime;
@@ -596,6 +598,8 @@ namespace OpenRA
 					{
 						world.OrderGenerator.Tick(world);
 					});
+
+					Console.WriteLine("LastTickTime: {0}, delta: {1}", orderManager.LastTickTime, integralTickTimestep >= TimestepJankThreshold ? integralTickTimestep : worldTimestep);
 
 					if (orderManager.TryTick())
 					{
@@ -772,7 +776,7 @@ namespace OpenRA
 				// Halve framerate and double logic when catching up
 				if (OrderManager.IsCatchingUp)
 				{
-					logicInterval /= 2;
+					logicInterval /= 4;
 					renderInterval *= 2;
 				}
 

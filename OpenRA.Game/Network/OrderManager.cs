@@ -40,11 +40,10 @@ namespace OpenRA.Network
 		public bool IsNetTick { get { return LocalFrameNumber % NetTickScale == 0; } }
 		public int NetFrameNumber { get; private set; }
 		public int LocalFrameNumber;
-		public int NextReceivedNetFrame { get; private set; }
-		public int NextSafeNetFrame { get; private set; }
 
-		public int SyncFrameScale = 30; // TODO make this based on actual time, I would suggest once per second
+		public int SyncFrameScale = 1; // TODO make this based on actual time, I would suggest once per second
 
+		public bool ShouldUseCatchUp = false;
 		public int OrderLatency; // Set during lobby by a "SyncInfo" packet, see UnitOrders
 		public int NextOrderFrame;
 		public bool IsCatchingUp { get; private set; }
@@ -79,11 +78,10 @@ namespace OpenRA.Network
 			if (GameStarted)
 				return;
 
-			// HACK: Need to add local client for shellmap
+			// HACK: Need to add local player when there is no server, e.g. shell map
 			frameData.AddClient(Connection.LocalClientId);
 			foreach (var client in LobbyInfo.Clients)
-				if (client.Index != Connection.LocalClientId)
-					frameData.AddClient(client.Index);
+				frameData.AddClient(client.Index);
 
 			// Generating sync reports is expensive, so only do it if we have
 			// other players to compare against if a desync did occur
@@ -92,11 +90,9 @@ namespace OpenRA.Network
 			NetFrameNumber = 1;
 			NextOrderFrame = 1;
 
-			NetHistory.Restart(Connection.LocalClientId);
-
 			// HACK: FramesAhead is only ever 0 in singleplayer, so we increase the rate of apparent net ticks to decrease latency
-			if (OrderLatency == 0)
-				NetTickScale = 1;
+			// if (OrderLatency == 0)
+			// 	NetTickScale = 1;
 
 			// Technically redundant since we will attempt to send orders before the next frame
 			// but gets our framesahead orders out sooner
@@ -112,6 +108,10 @@ namespace OpenRA.Network
 			syncReport = new SyncReport(this);
 			ChatCache = new ReadOnlyList<ChatLine>(chatCache);
 			AddChatLine += CacheChatLine;
+
+			// HACK: should not rely on this
+			if (conn is NetworkConnection)
+				ShouldUseCatchUp = true;
 		}
 
 		public void IssueOrders(Order[] orders)
@@ -196,34 +196,11 @@ namespace OpenRA.Network
 
 		void CompensateForLatency()
 		{
-			if (Connection.LatencyReporter.IsLocal)
-			{
-				NextSafeNetFrame = NetFrameNumber;
-				return;
-			}
-
-			var realLatency = Connection.LatencyReporter.Latency;
-			var jitter = Connection.LatencyReporter.PeakJitter;
-
-			var msPerNetFrame = World.Timestep * Game.NetTickScale;
-
-			// Calculate catchup: we want to have enough frames in the incoming buffer to deal with peak jitter
-			var targetIncomingBuffer = (int)Math.Round((double)jitter / msPerNetFrame);
-
-			var lastAck = Connection.LastAckedFrame;
-
-			// Our orders exist in FrameData even if they aren't acked :/
-			// NextSafeNetFrame = Math.Min(lastAck - targetIncomingBuffer, NextReceivedNetFrame);
-			// TODO: Add a new latency measure
-			NextSafeNetFrame = NextReceivedNetFrame;
-
-			var catchUpNetFrames = NextSafeNetFrame - NetFrameNumber;
+			var catchUpNetFrames = frameData.BufferSizeForClient(Connection.LocalClientId) - 1;
 			if (catchUpNetFrames < 0)
 				catchUpNetFrames = 0;
 
-			IsCatchingUp = catchUpNetFrames > 0;
-
-			BufferNetHistory(realLatency, jitter, catchUpNetFrames);
+			IsCatchingUp = ShouldUseCatchUp && catchUpNetFrames > 0;
 		}
 
 		IEnumerable<Session.Client> GetClientsNotReadyForNextFrame
@@ -242,26 +219,17 @@ namespace OpenRA.Network
 			if (NetFrameNumber < 1)
 				return;
 
-			// Loop exists to ensure we never miss a frame, since that would stall the game.
-			// This loop also sends the initial blank frames to get to the correct order latency.
-			// while (lastFrameSent < NetFrameNumber + FramesAhead)
-			// {
-			// 	lastFrameSent++;
-			// 	if (GameSaveLastFrame < NetFrameNumber + FramesAhead)
-			// 		Connection.Send(lastFrameSent, localOrders.Select(o => o.Serialize()).ToList());
-			// 	localOrders.Clear();
-			// }
-
-			if (localOrders.Count > 0)
+			// Once every few net frames, should send a packet to the server to indicate which real frame we are on,
+			// and whether or not we think we are catching up.
+			// This way, server can stall the game for us if we are slowing down significantly, and it will also detect
+			// spiked where we were unable to do or say anything, even if we weren't sending orders.
+			if (GameSaveLastFrame < NetFrameNumber)
 			{
-				if (GameSaveLastFrame < NextOrderFrame)
-				{
-					Connection.Send(NextOrderFrame, localOrders.Select(o => o.Serialize()).ToList());
-					localOrders.Clear();
-				}
-
-				NextOrderFrame++;
+				Connection.Send(NextOrderFrame, localOrders.Select(o => o.Serialize()).ToList());
+				localOrders.Clear();
 			}
+
+			NextOrderFrame++;
 		}
 
 		/*
@@ -323,6 +291,11 @@ namespace OpenRA.Network
 			// Always send immediate orders
 			Sync.RunUnsynced(Game.Settings.Debug.SyncCheckUnsyncedCode, World, ProcessImmediateOrders);
 
+			// Sets catchup frames
+			CompensateForLatency();
+
+			Console.WriteLine("Catchup frames: {0}, {1}", frameData.BufferSizeForClient(Connection.LocalClientId), IsCatchingUp);
+
 			var willTick = shouldTick;
 			if (willTick && IsNetTick)
 			{
@@ -334,18 +307,8 @@ namespace OpenRA.Network
 			if (willTick)
 				LocalFrameNumber++;
 
+			Console.WriteLine("Will tick: {0}", willTick);
 			return willTick;
-		}
-
-		public void BufferNetHistory(int latency, int peakJitter, int catchUpNetFrames)
-		{
-			var buffers = new Dictionary<int, int>();
-
-			foreach (var c in frameData.ClientsPlayingInFrame(NetFrameNumber))
-				buffers.Add(c, frameData.BufferSizeForClient(NetFrameNumber, c));
-
-			NetHistory.Tick(new NetHistoryFrame(NetFrameNumber, NetFrameNumber <= NextSafeNetFrame, catchUpNetFrames, buffers,
-				latency, Connection.LatencyReporter.Jitter, peakJitter));
 		}
 
 		public void Dispose()

@@ -38,11 +38,6 @@ namespace OpenRA.Network
 		public readonly Session LobbyInfo;
 		public readonly string Filename;
 
-		public ILatencyReporter LatencyReporter
-		{
-			get { return EmptyLatencyReporter.Instance; }
-		}
-
 		public ReplayConnection(string replayFilename)
 		{
 			Filename = replayFilename;

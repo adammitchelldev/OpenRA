@@ -38,7 +38,8 @@ namespace OpenRA.Network
 
 		public void AddClient(int clientId)
 		{
-			framePackets.Add(clientId, new Queue<byte[]>());
+			if (!framePackets.ContainsKey(clientId))
+				framePackets.Add(clientId, new Queue<byte[]>());
 		}
 
 		public void ClientQuit(int clientId)
