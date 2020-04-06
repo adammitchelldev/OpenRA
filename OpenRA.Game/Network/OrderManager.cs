@@ -43,7 +43,8 @@ namespace OpenRA.Network
 
 		public int SyncFrameScale = 1; // TODO make this based on actual time, I would suggest once per second
 
-		public bool ShouldUseCatchUp = false;
+		public int LastSlowDownRequestTick;
+		public bool ShouldUseCatchUp;
 		public int OrderLatency; // Set during lobby by a "SyncInfo" packet, see UnitOrders
 		public int NextOrderFrame;
 		public bool IsCatchingUp { get; private set; }
@@ -201,6 +202,12 @@ namespace OpenRA.Network
 				catchUpNetFrames = 0;
 
 			IsCatchingUp = ShouldUseCatchUp && catchUpNetFrames > 0;
+
+			if (LastSlowDownRequestTick + 5 < NetFrameNumber && (catchUpNetFrames > 5))
+			{
+				localImmediateOrders.Add(Order.FromTargetString("SlowDown", catchUpNetFrames.ToString(), true));
+				LastSlowDownRequestTick = NetFrameNumber;
+			}
 		}
 
 		IEnumerable<Session.Client> GetClientsNotReadyForNextFrame
@@ -284,17 +291,15 @@ namespace OpenRA.Network
 					SendOrders();
 			}
 
+			// Sets catchup frames and asks server to slow down if they are too high
+			CompensateForLatency();
+
 			SendImmediateOrders();
 
 			ReceiveAllOrdersAndCheckSync();
 
 			// Always send immediate orders
 			Sync.RunUnsynced(Game.Settings.Debug.SyncCheckUnsyncedCode, World, ProcessImmediateOrders);
-
-			// Sets catchup frames
-			CompensateForLatency();
-
-			Console.WriteLine("Catchup frames: {0}, {1}", frameData.BufferSizeForClient(Connection.LocalClientId), IsCatchingUp);
 
 			var willTick = shouldTick;
 			if (willTick && IsNetTick)

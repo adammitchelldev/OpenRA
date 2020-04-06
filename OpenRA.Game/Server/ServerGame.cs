@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace OpenRA.Server
@@ -16,6 +18,10 @@ namespace OpenRA.Server
 		public int CurrentNetFrame { get; protected set; }
 		public long NextFrameTick { get; protected set; }
 		public int NetTimestep { get; protected set; }
+
+		int slowdownHold;
+		int slowdownAmount;
+		public int AdjustedTimestep { get { return NetTimestep + slowdownAmount; } }
 
 		public int MillisToNextNetFrame
 		{
@@ -41,9 +47,26 @@ namespace OpenRA.Server
 
 				CurrentNetFrame++;
 				if (now - NextFrameTick > JankThreshold)
-					NextFrameTick = now + NetTimestep;
+					NextFrameTick = now + AdjustedTimestep;
 				else
-					NextFrameTick += NetTimestep;
+					NextFrameTick += AdjustedTimestep;
+
+				if (slowdownHold > 0)
+					slowdownHold--;
+
+				if (slowdownHold == 0 && slowdownAmount > 0)
+					slowdownAmount = slowdownAmount - (slowdownAmount / 4) - 1;
+			}
+		}
+
+		Dictionary<int, int> slowdowns = new Dictionary<int, int>();
+
+		public void SlowDown(int amount)
+		{
+			if (slowdownAmount < amount)
+			{
+				slowdownAmount = amount;
+				slowdownHold = amount;
 			}
 		}
 	}

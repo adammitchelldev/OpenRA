@@ -888,6 +888,13 @@ namespace OpenRA.Server
 
 						break;
 					}
+
+				case "SlowDown":
+					{
+						var amount = int.Parse(o.TargetString);
+						serverGame.SlowDown(amount);
+						break;
+					}
 			}
 		}
 
