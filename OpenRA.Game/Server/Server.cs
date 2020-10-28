@@ -1312,7 +1312,8 @@ namespace OpenRA.Server
 
 				State = ServerState.GameStarted;
 
-				var disconnectData = new[] { (byte)OrderType.Disconnect };
+				// TODO remove: this "pre-disconnecting" method adds unnecessary complexity just for the sake of the replay stream
+				/*var disconnectData = new[] { (byte)OrderType.Disconnect };
 				foreach (var c in Conns)
 				{
 					foreach (var d in Conns)
@@ -1320,7 +1321,7 @@ namespace OpenRA.Server
 
 					if (recorder != null)
 						recorder.ReceiveFrame(c.PlayerIndex, int.MaxValue, disconnectData);
-				}
+				}*/
 
 				if (GameSave == null && LobbyInfo.GlobalSettings.GameSavesEnabled)
 					GameSave = new GameSave();
