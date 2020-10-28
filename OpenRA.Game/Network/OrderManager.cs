@@ -257,10 +257,10 @@ namespace OpenRA.Network
 						if (World.Players[i].WinState == WinState.Lost)
 							defeatState |= 1UL << i;
 
-					Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(World.SyncHash()));
+					Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(World.SyncHash(), defeatState));
 				}
 				else
-					Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(0));
+					Connection.SendSync(NetFrameNumber, OrderIO.SerializeSync(0, 0));
 
 				if (generateSyncReport)
 					using (new PerfSample("sync_report"))
