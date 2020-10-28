@@ -109,8 +109,9 @@ namespace OpenRA.Network
 						var client = tmpPacketPair.ClientId;
 
 						// Don't replace the final disconnection packet - we still want this to end the replay.
-						if (client == lastClientToDisconnect)
-							continue;
+						// TODO Ensure that this is not necessary
+						/*if (client == lastClientToDisconnect)
+							continue;*/
 
 						var packet = tmpPacketPair.Packet;
 						if (packet.Length == 5 && packet[4] == (byte)OrderType.Disconnect)
