@@ -211,7 +211,7 @@ namespace OpenRA.Network
 		{
 			get
 			{
-				return NetFrameNumber >= 1 // TODO review, compare to bleed
+				return GameStarted // TODO review, compare to bleed
 					? frameData.ClientsNotReadyForFrame()
 						.Select(a => LobbyInfo.ClientWithIndex(a))
 					: NoClients;
@@ -220,7 +220,7 @@ namespace OpenRA.Network
 
 		void SendOrders()
 		{
-			if (NetFrameNumber < 1)
+			if (!GameStarted)
 				return;
 
 			// Once every few net frames, should send a packet to the server to indicate which real frame we are on,
