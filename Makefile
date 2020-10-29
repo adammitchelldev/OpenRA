@@ -96,7 +96,7 @@ endif
 endif
 
 # program targets
-VERSION     = $(shell git name-rev --name-only --tags --no-undefined HEAD 2>/dev/null || echo git-`git rev-parse --short HEAD`)
+VERSION     = $(shell git name-rev --name-only --tags --no-undefined HEAD 2>/dev/null || echo git-`git rev-parse --short=9 HEAD`)
 
 check-scripts:
 	@echo
