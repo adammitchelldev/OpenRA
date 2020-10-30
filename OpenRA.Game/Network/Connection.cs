@@ -148,7 +148,7 @@ namespace OpenRA.Network
 			var ms = new MemoryStream(4 + syncData.Length);
 			ms.WriteArray(BitConverter.GetBytes(frame));
 			ms.WriteArray(syncData);
-			Send(ms.ToArray());
+			Send(ms.GetBuffer());
 		}
 
 		protected virtual void Send(byte[] packet)
@@ -337,26 +337,44 @@ namespace OpenRA.Network
 
 		void Ack(byte[] buf)
 		{
-			var reader = new BinaryReader(new MemoryStream(buf));
-			var frameReceived = reader.ReadInt32();
-			reader.ReadByte();
-			var framesToAck = reader.ReadInt16();
-
-			var ms = new MemoryStream();
-			ms.WriteArray(BitConverter.GetBytes(frameReceived));
-
-			for (int i = 0; i < framesToAck; i++)
+			int frameReceived;
+			short framesToAck;
+			using (var reader = new BinaryReader(new MemoryStream(buf)))
 			{
-				byte[] queuedPacket;
-				if (!awaitingAckPackets.TryDequeue(out queuedPacket))
-				{
-					throw new InvalidOperationException("Received acks for unknown frames");
-				}
-
-				ms.WriteArray(queuedPacket);
+				frameReceived = reader.ReadInt32();
+				reader.ReadByte();
+				framesToAck = reader.ReadInt16();
 			}
 
-			AddPacket(new ReceivedPacket { FromClient = LocalClientId, Data = ms.ToArray() });
+			using (var ms = new MemoryStream(4 + awaitingAckPackets.Take(framesToAck).Sum(i => i.Length)))
+			{
+				ms.WriteArray(BitConverter.GetBytes(frameReceived));
+
+				for (int i = 0; i < framesToAck; i++)
+				{
+					byte[] queuedPacket;
+					if (!awaitingAckPackets.TryDequeue(out queuedPacket))
+					{
+						for (int c = 0; c < 5; c++)
+						{
+							if (awaitingAckPackets.TryDequeue(out queuedPacket))
+							{
+								// The dequeing could've failed because of concurrency, so we retry
+								break;
+							}
+						}
+
+						if (queuedPacket == default)
+						{
+							throw new InvalidOperationException("Received acks for unknown frames");
+						}
+					}
+
+					ms.WriteArray(queuedPacket);
+				}
+
+				AddPacket(new ReceivedPacket { FromClient = LocalClientId, Data = ms.GetBuffer() });
+			}
 		}
 
 		public override int LocalClientId { get { return clientId; } }
