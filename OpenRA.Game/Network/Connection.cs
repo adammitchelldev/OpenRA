@@ -352,22 +352,22 @@ namespace OpenRA.Network
 
 				for (int i = 0; i < framesToAck; i++)
 				{
-					byte[] queuedPacket;
-					if (!awaitingAckPackets.TryDequeue(out queuedPacket))
+					byte[] queuedPacket = default;
+					if (awaitingAckPackets.Count > 0 && !awaitingAckPackets.TryDequeue(out queuedPacket))
 					{
+						// The dequeing failed because of concurrency, so we retry
 						for (int c = 0; c < 5; c++)
 						{
 							if (awaitingAckPackets.TryDequeue(out queuedPacket))
 							{
-								// The dequeing could've failed because of concurrency, so we retry
 								break;
 							}
 						}
+					}
 
-						if (queuedPacket == default)
-						{
-							throw new InvalidOperationException("Received acks for unknown frames");
-						}
+					if (queuedPacket == default)
+					{
+						throw new InvalidOperationException("Received acks for unknown frames");
 					}
 
 					ms.WriteArray(queuedPacket);
