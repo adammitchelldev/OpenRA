@@ -201,12 +201,12 @@ namespace OpenRA.Network
 		}
 	}
 
-	sealed class NetworkConnection : EchoConnection
+	internal sealed class NetworkConnection : EchoConnection
 	{
 		readonly ConnectionTarget target;
 		TcpClient tcp;
 		IPEndPoint endpoint;
-		readonly List<byte[]> queuedSyncPackets = new List<byte[]>();
+		internal readonly List<byte[]> QueuedSyncPackets = new List<byte[]>();
 		readonly ConcurrentQueue<byte[]> awaitingAckPackets = new ConcurrentQueue<byte[]>();
 		volatile ConnectionState connectionState = ConnectionState.Connecting;
 		volatile int clientId;
@@ -225,6 +225,11 @@ namespace OpenRA.Network
 				Name = "{0} (connect to {1})".F(GetType().Name, target),
 				IsBackground = true
 			}.Start();
+		}
+
+		internal NetworkConnection()
+		{
+			// Testing constructor
 		}
 
 		void NetworkConnectionConnect()
@@ -382,41 +387,46 @@ namespace OpenRA.Network
 
 		public override void SendSync(int frame, byte[] syncData)
 		{
-			var ms = new MemoryStream(4 + syncData.Length);
-			ms.WriteArray(BitConverter.GetBytes(frame));
-			ms.WriteArray(syncData);
+			using (var ms = new MemoryStream(4 + syncData.Length))
+			{
+				ms.WriteArray(BitConverter.GetBytes(frame));
+				ms.WriteArray(syncData);
 
-			queuedSyncPackets.Add(ms.ToArray()); // TODO: re-add sync packets
+				QueuedSyncPackets.Add(ms.GetBuffer()); // TODO: re-add sync packets
+			}
 		}
 
 		// Override send frame orders so we can hold them until ACK'ed
 		public override void Send(int frame, IEnumerable<byte[]> orders)
 		{
-			var ms = new MemoryStream();
-
-			var ordersArray = orders as byte[][] ?? orders.ToArray();
-
-			if (ordersArray.Length > 0)
+			var ordersLength = orders.Sum(i => i.Length);
+			using (var ms = new MemoryStream(8 + ordersLength))
 			{
-				// Write our packet to be acked
-				var ackMs = new MemoryStream();
-				foreach (var o in ordersArray)
+				if (orders.Count() > 0)
 				{
-					ackMs.WriteArray(o);
+					// Write our packet to be acked
+					byte[] ackArray;
+					using (var ackMs = new MemoryStream(ordersLength))
+					{
+						foreach (var o in orders)
+						{
+							ackMs.WriteArray(o);
+						}
+
+						ackArray = ackMs.GetBuffer();
+					}
+
+					awaitingAckPackets.Enqueue(ackArray); // TODO fix having to write byte buffer twice
+
+					// Write our packet to send to the main memory stream
+					ms.WriteArray(BitConverter.GetBytes(ackArray.Length + 4));
+					ms.WriteArray(BitConverter.GetBytes(frame)); // TODO: Remove frames from send protocol
+					ms.WriteArray(ackArray);
 				}
 
-				var ackArray = ackMs.ToArray();
-
-				awaitingAckPackets.Enqueue(ackArray); // TODO fix having to write byte buffer twice
-
-				// Write our packet to send to the main memory stream
-				ms.WriteArray(BitConverter.GetBytes(ackArray.Length + 4));
-				ms.WriteArray(BitConverter.GetBytes(frame)); // TODO: Remove frames from send protocol
-				ms.WriteArray(ackArray);
+				WriteQueuedSyncPackets(ms);
+				SendNetwork(ms);
 			}
-
-			WriteQueuedSyncPackets(ms);
-			SendNetwork(ms);
 		}
 
 		protected override void Send(byte[] packet)
@@ -441,22 +451,35 @@ namespace OpenRA.Network
 			catch (IOException) { /* ditto */ }
 		}
 
-		void WriteOrderPacket(MemoryStream ms, byte[] packet)
+		internal void WriteOrderPacket(MemoryStream ms, byte[] packet)
 		{
 			ms.WriteArray(BitConverter.GetBytes(packet.Length));
 			ms.WriteArray(packet);
 		}
 
-		void WriteQueuedSyncPackets(MemoryStream ms)
+		internal void WriteQueuedSyncPackets(MemoryStream ms)
 		{
-			foreach (var q in queuedSyncPackets)
+			if (QueuedSyncPackets.Any())
+			{
+				int listLengthNeeded = QueuedSyncPackets.Sum(i => 4 + i.Length);
+				if (ms.Capacity - ms.Length < listLengthNeeded)
+				{
+					ms.Capacity += listLengthNeeded - (ms.Capacity - (int)ms.Length);
+				}
+			}
+			else
+			{
+				return;
+			}
+
+			foreach (var q in QueuedSyncPackets)
 			{
 				ms.WriteArray(BitConverter.GetBytes(q.Length));
 				ms.WriteArray(q);
 				base.Send(q);
 			}
 
-			queuedSyncPackets.Clear();
+			QueuedSyncPackets.Clear();
 		}
 
 		protected override void Dispose(bool disposing)
