@@ -100,7 +100,7 @@ namespace OpenRA.Network
 			public byte[] Data;
 		}
 
-		readonly List<ReceivedPacket> receivedPackets = new List<ReceivedPacket>();
+		readonly ConcurrentBag<ReceivedPacket> receivedPackets = new ConcurrentBag<ReceivedPacket>();
 		public ReplayRecorder Recorder { get; private set; }
 
 		public virtual int LocalClientId
@@ -161,17 +161,16 @@ namespace OpenRA.Network
 
 		protected void AddPacket(ReceivedPacket packet)
 		{
-			lock (receivedPackets)
-				receivedPackets.Add(packet);
+			receivedPackets.Add(packet);
 		}
 
 		public virtual void Receive(Action<int, byte[]> packetFn)
 		{
-			ReceivedPacket[] packets;
-			lock (receivedPackets)
+			var packets = new List<ReceivedPacket>(receivedPackets.Count);
+
+			while (receivedPackets.TryTake(out var received))
 			{
-				packets = receivedPackets.ToArray();
-				receivedPackets.Clear();
+				packets.Add(received);
 			}
 
 			foreach (var p in packets)
