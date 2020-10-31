@@ -128,7 +128,7 @@ namespace OpenRA.Network
 		}
 
 		// Do nothing: ignore locally generated orders
-		public void Send(int frame, IEnumerable<byte[]> orders) { }
+		public void Send(int frame, IEnumerable<byte[]> orders, MemoryStream ms = null) { }
 		public void SendImmediate(IEnumerable<byte[]> orders) { }
 
 		// TODO: Fix this HACK
