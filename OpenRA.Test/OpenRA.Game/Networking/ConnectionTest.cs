@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Net.Sockets;
 using Moq;
 using NUnit.Framework;
 using OpenRA.Network;
@@ -51,6 +53,22 @@ namespace OpenRA.Test
 
 			Assert.AreEqual(18, ms.Capacity);
 			Assert.AreEqual(18, ms.Length); // 5 bytes from the each pack array and an int
+		}
+
+		[TestCase(TestName = "Send creates the buffer precisely")]
+		public void MemoryStreamWritingOnSendCreatesBufferTheRightSize()
+		{
+			var tcpClientMock = new Mock<ITcpClient>(MockBehavior.Loose);
+			tcpClientMock.Setup(i => i.GetStream()).Returns(new MemoryStream());
+
+			var conn = new NetworkConnection();
+			conn.TcpClient = tcpClientMock.Object;
+			MemoryStream ms = new MemoryStream(10);
+
+			conn.Send(1, new List<byte[]>() { new byte[2] }, ms);
+
+			Assert.AreEqual(10, ms.Capacity);
+			Assert.AreEqual(10, ms.Length);
 		}
 	}
 }

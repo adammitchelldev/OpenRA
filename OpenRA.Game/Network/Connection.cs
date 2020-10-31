@@ -37,7 +37,7 @@ namespace OpenRA.Network
 		ConnectionState ConnectionState { get; }
 		IPEndPoint EndPoint { get; }
 		string ErrorMessage { get; }
-		void Send(int frame, IEnumerable<byte[]> orders);
+		void Send(int frame, IEnumerable<byte[]> orders, MemoryStream ms = null);
 		void SendImmediate(IEnumerable<byte[]> orders);
 		void SendSync(int frame, byte[] syncData);
 		void Receive(Action<int, byte[]> packetFn);
@@ -123,9 +123,9 @@ namespace OpenRA.Network
 			get { return null; }
 		}
 
-		public virtual void Send(int frame, IEnumerable<byte[]> orders)
+		public virtual void Send(int frame, IEnumerable<byte[]> orders, MemoryStream ms = null)
 		{
-			var ms = new MemoryStream();
+			ms = new MemoryStream();
 			ms.WriteArray(BitConverter.GetBytes(frame));
 			foreach (var o in orders)
 				ms.WriteArray(o);
@@ -204,7 +204,7 @@ namespace OpenRA.Network
 	internal sealed class NetworkConnection : EchoConnection
 	{
 		readonly ConnectionTarget target;
-		TcpClient tcp;
+		internal ITcpClient TcpClient;
 		IPEndPoint endpoint;
 		internal readonly List<byte[]> QueuedSyncPackets = new List<byte[]>();
 		readonly ConcurrentQueue<byte[]> awaitingAckPackets = new ConcurrentQueue<byte[]>();
@@ -234,7 +234,7 @@ namespace OpenRA.Network
 
 		void NetworkConnectionConnect()
 		{
-			var queue = new BlockingCollection<TcpClient>();
+			var queue = new BlockingCollection<ITcpClient>();
 
 			var atLeastOneEndpoint = false;
 			foreach (var endpoint in target.GetConnectEndPoints())
@@ -244,7 +244,7 @@ namespace OpenRA.Network
 				{
 					try
 					{
-						var client = new TcpClient(endpoint.AddressFamily) { NoDelay = true };
+						var client = new OpenRATcpClient(endpoint.AddressFamily) { NoDelay = true };
 						client.Connect(endpoint.Address, endpoint.Port);
 
 						try
@@ -276,14 +276,14 @@ namespace OpenRA.Network
 			}
 
 			// Wait up to 5s for a successful connection. This should hopefully be enough because such high latency makes the game unplayable anyway.
-			else if (queue.TryTake(out tcp, 5000))
+			else if (queue.TryTake(out TcpClient, 5000))
 			{
 				// Copy endpoint here to have it even after getting disconnected.
-				endpoint = (IPEndPoint)tcp.Client.RemoteEndPoint;
+				endpoint = (IPEndPoint)TcpClient.Client.RemoteEndPoint;
 
 				new Thread(NetworkConnectionReceive)
 				{
-					Name = "{0} (receive from {1})".F(GetType().Name, tcp.Client.RemoteEndPoint),
+					Name = "{0} (receive from {1})".F(GetType().Name, TcpClient.Client.RemoteEndPoint),
 					IsBackground = true
 				}.Start();
 			}
@@ -302,7 +302,7 @@ namespace OpenRA.Network
 		{
 			try
 			{
-				var reader = new BinaryReader(tcp.GetStream());
+				var reader = new BinaryReader(TcpClient.GetStream());
 				var handshakeProtocol = reader.ReadInt32();
 
 				if (handshakeProtocol != ProtocolVersion.Handshake)
@@ -397,11 +397,21 @@ namespace OpenRA.Network
 		}
 
 		// Override send frame orders so we can hold them until ACK'ed
-		public override void Send(int frame, IEnumerable<byte[]> orders)
+		public override void Send(int frame, IEnumerable<byte[]> orders, MemoryStream ms = null)
 		{
 			var ordersLength = orders.Sum(i => i.Length);
-			using (var ms = new MemoryStream(8 + ordersLength))
+			var msWasNull = ms == null;
+			try
 			{
+				if (ms == null)
+				{
+					ms = new MemoryStream(8 + ordersLength);
+				}
+				else if (ms.Capacity < 8 + ordersLength)
+				{
+					ms.Capacity = 8 + ordersLength;
+				}
+
 				if (orders.Count() > 0)
 				{
 					// Write our packet to be acked
@@ -427,6 +437,13 @@ namespace OpenRA.Network
 				WriteQueuedSyncPackets(ms);
 				SendNetwork(ms);
 			}
+			finally
+			{
+				if (msWasNull)
+				{
+					ms.Dispose();
+				}
+			}
 		}
 
 		protected override void Send(byte[] packet)
@@ -443,7 +460,7 @@ namespace OpenRA.Network
 		{
 			try
 			{
-				ms.WriteTo(tcp.GetStream());
+				ms.WriteTo(TcpClient.GetStream());
 			}
 			catch (SocketException) { /* drop this on the floor; we'll pick up the disconnect from the reader thread */ }
 			catch (ObjectDisposedException) { /* ditto */ }
@@ -490,7 +507,7 @@ namespace OpenRA.Network
 
 			// Closing the stream will cause any reads on the receiving thread to throw.
 			// This will mark the connection as no longer connected and the thread will terminate cleanly.
-			tcp?.Close();
+			TcpClient?.Close();
 
 			base.Dispose(disposing);
 		}
