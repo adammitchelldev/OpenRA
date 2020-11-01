@@ -578,49 +578,51 @@ namespace OpenRA
 			else
 				worldTimestep = world.Timestep;
 			var worldTickDelta = tick - orderManager.LastTickTime;
-			if (worldTimestep != 0 && worldTickDelta >= worldTimestep)
+			if (worldTimestep == 0 || worldTickDelta < worldTimestep)
 			{
-				using (new PerfSample("tick_time"))
+				return;
+			}
+
+			using (new PerfSample("tick_time"))
+			{
+				// Tick the world to advance the world time to match real time:
+				//    If dt < TickJankThreshold then we should try and catch up by repeatedly ticking
+				//    If dt >= TickJankThreshold then we should accept the jank and progress at the normal rate
+				// dt is rounded down to an integer tick count in order to preserve fractional tick components.
+				var integralTickTimestep = (worldTickDelta / worldTimestep) * worldTimestep;
+				orderManager.LastTickTime += integralTickTimestep >= TimestepJankThreshold ? integralTickTimestep : worldTimestep;
+
+				Sound.Tick();
+
+				if (world == null)
 				{
-					// Tick the world to advance the world time to match real time:
-					//    If dt < TickJankThreshold then we should try and catch up by repeatedly ticking
-					//    If dt >= TickJankThreshold then we should accept the jank and progress at the normal rate
-					// dt is rounded down to an integer tick count in order to preserve fractional tick components.
-					var integralTickTimestep = (worldTickDelta / worldTimestep) * worldTimestep;
-					orderManager.LastTickTime += integralTickTimestep >= TimestepJankThreshold ? integralTickTimestep : worldTimestep;
-
-					Sound.Tick();
-
-					if (world == null)
-					{
-						orderManager.TickPreGame();
-						return;
-					}
-
-					// Collect orders first, we will dispatch them if we can this frame
-					Sync.RunUnsynced(Settings.Debug.SyncCheckUnsyncedCode, world, () =>
-					{
-						world.OrderGenerator.Tick(world);
-					});
-
-					if (orderManager.TryTick())
-					{
-						Log.Write("debug", "--Tick: {0} ({1})", LocalTick, orderManager.IsNetTick ? "net" : "local");
-
-						world.Tick();
-
-						PerfHistory.Tick();
-					}
-					else if (orderManager.NetFrameNumber == 0)
-						orderManager.LastTickTime = RunTime;
-
-					// Wait until we have done our first world Tick before TickRendering
-					if (orderManager.LocalFrameNumber > 0)
-						Sync.RunUnsynced(Settings.Debug.SyncCheckUnsyncedCode, world, () => world.TickRender(worldRenderer));
+					orderManager.TickPreGame();
+					return;
 				}
 
-				benchmark?.Tick(LocalTick);
+				// Collect orders first, we will dispatch them if we can this frame
+				Sync.RunUnsynced(Settings.Debug.SyncCheckUnsyncedCode, world, () =>
+				{
+					world.OrderGenerator.Tick(world);
+				});
+
+				if (orderManager.TryTick())
+				{
+					Log.Write("debug", "--Tick: {0} ({1})", LocalTick, orderManager.IsNetTick ? "net" : "local");
+
+					world.Tick();
+
+					PerfHistory.Tick();
+				}
+				else if (orderManager.NetFrameNumber == 0)
+					orderManager.LastTickTime = RunTime;
+
+				// Wait until we have done our first world Tick before TickRendering
+				if (orderManager.LocalFrameNumber > 0)
+					Sync.RunUnsynced(Settings.Debug.SyncCheckUnsyncedCode, world, () => world.TickRender(worldRenderer));
 			}
+
+			benchmark?.Tick(LocalTick);
 		}
 
 		static void LogicTick()
