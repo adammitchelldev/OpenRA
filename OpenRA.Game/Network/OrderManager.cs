@@ -78,8 +78,11 @@ namespace OpenRA.Network
 			if (GameStarted)
 				return;
 
-			// HACK: Need to add local player when there is no server, e.g. shell map
-			frameData.AddClient(Connection.LocalClientId);
+			if (LobbyInfo.Clients.Count == 0)
+			{
+				frameData.AddClient(Connection.LocalClientId);
+			}
+
 			foreach (var client in LobbyInfo.Clients)
 				frameData.AddClient(client.Index);
 
