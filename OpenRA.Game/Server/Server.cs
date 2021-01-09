@@ -1115,61 +1115,62 @@ namespace OpenRA.Server
 			{
 				if (!PreConns.Remove(toDrop))
 				{
-					Conns.Remove(toDrop);
-
-					var dropClient = LobbyInfo.Clients.FirstOrDefault(c1 => c1.Index == toDrop.PlayerIndex);
-					if (dropClient == null)
-						return;
-
-					var suffix = "";
-					if (State == ServerState.GameStarted)
-						suffix = dropClient.IsObserver ? " (Spectator)" : dropClient.Team != 0 ? " (Team {0})".F(dropClient.Team) : "";
-					SendMessage("{0}{1} has disconnected.".F(dropClient.Name, suffix));
-
-					// Send disconnected order, even if still in the lobby
-					DispatchOrdersToOtherClients(toDrop, 0, Order.FromTargetString("Disconnected", "", true).Serialize());
-
-					if (gameInfo != null && !dropClient.IsObserver)
+					if (Conns.Remove(toDrop))
 					{
-						var disconnectedPlayer = gameInfo.Players.First(p => p.ClientIndex == toDrop.PlayerIndex);
-						disconnectedPlayer.DisconnectFrame = toDrop.MostRecentFrame;
-					}
+						var dropClient = LobbyInfo.Clients.FirstOrDefault(c1 => c1.Index == toDrop.PlayerIndex);
+						if (dropClient == null)
+							return;
 
-					LobbyInfo.Clients.RemoveAll(c => c.Index == toDrop.PlayerIndex);
-					LobbyInfo.ClientPings.RemoveAll(p => p.Index == toDrop.PlayerIndex);
+						var suffix = "";
+						if (State == ServerState.GameStarted)
+							suffix = dropClient.IsObserver ? " (Spectator)" : dropClient.Team != 0 ? " (Team {0})".F(dropClient.Team) : "";
+						SendMessage("{0}{1} has disconnected.".F(dropClient.Name, suffix));
 
-					// Client was the server admin
-					// TODO: Reassign admin for game in progress via an order
-					if (Type == ServerType.Dedicated && dropClient.IsAdmin && State == ServerState.WaitingPlayers)
-					{
-						// Remove any bots controlled by the admin
-						LobbyInfo.Clients.RemoveAll(c => c.Bot != null && c.BotControllerClientIndex == toDrop.PlayerIndex);
+						// Send disconnected order, even if still in the lobby
+						DispatchOrdersToOtherClients(toDrop, 0, Order.FromTargetString("Disconnected", "", true).Serialize());
 
-						var nextAdmin = LobbyInfo.Clients.Where(c1 => c1.Bot == null)
-							.MinByOrDefault(c => c.Index);
-
-						if (nextAdmin != null)
+						if (gameInfo != null && !dropClient.IsObserver)
 						{
-							nextAdmin.IsAdmin = true;
-							SendMessage("{0} is now the admin.".F(nextAdmin.Name));
+							var disconnectedPlayer = gameInfo.Players.First(p => p.ClientIndex == toDrop.PlayerIndex);
+							disconnectedPlayer.DisconnectFrame = toDrop.MostRecentFrame;
 						}
+
+						LobbyInfo.Clients.RemoveAll(c => c.Index == toDrop.PlayerIndex);
+						LobbyInfo.ClientPings.RemoveAll(p => p.Index == toDrop.PlayerIndex);
+
+						// Client was the server admin
+						// TODO: Reassign admin for game in progress via an order
+						if (Type == ServerType.Dedicated && dropClient.IsAdmin && State == ServerState.WaitingPlayers)
+						{
+							// Remove any bots controlled by the admin
+							LobbyInfo.Clients.RemoveAll(c => c.Bot != null && c.BotControllerClientIndex == toDrop.PlayerIndex);
+
+							var nextAdmin = LobbyInfo.Clients.Where(c1 => c1.Bot == null)
+								.MinByOrDefault(c => c.Index);
+
+							if (nextAdmin != null)
+							{
+								nextAdmin.IsAdmin = true;
+								SendMessage("{0} is now the admin.".F(nextAdmin.Name));
+							}
+						}
+
+						if (serverGame != null)
+							serverGame.OrderBuffer.DropClient(toDrop.PlayerIndex);
+
+						DispatchServerCreatedOrdersToAllClients(toDrop, toDrop.MostRecentFrame, new[] { (byte)OrderType.Disconnect });
+
+						// All clients have left: clean up
+						if (!Conns.Any())
+							foreach (var t in serverTraits.WithInterface<INotifyServerEmpty>())
+								t.ServerEmpty(this);
+
+						if (Conns.Any() || Type == ServerType.Dedicated)
+							SyncLobbyClients();
+
+						if (Type != ServerType.Dedicated && dropClient.IsAdmin)
+							Shutdown();
 					}
-
-					if (serverGame != null)
-						serverGame.OrderBuffer.DropClient(toDrop.PlayerIndex);
-
-					DispatchServerCreatedOrdersToAllClients(toDrop, toDrop.MostRecentFrame, new[] { (byte)OrderType.Disconnect });
-
-					// All clients have left: clean up
-					if (!Conns.Any())
-						foreach (var t in serverTraits.WithInterface<INotifyServerEmpty>())
-							t.ServerEmpty(this);
-
-					if (Conns.Any() || Type == ServerType.Dedicated)
-						SyncLobbyClients();
-
-					if (Type != ServerType.Dedicated && dropClient.IsAdmin)
-						Shutdown();
 				}
 			}
 

@@ -24,12 +24,11 @@ namespace OpenRA.Server
 		// or copy them on receive. They should be able to be written the TCP stream without being copied.
 		// The count of the byte[] queue is used as the number of frames to ack.
 		// Since the connection is reliable, clients will understand what the ack count means.
-		Dictionary<int, List<byte[]>> clientOrdersBuffer = new Dictionary<int, List<byte[]>>();
+		readonly Dictionary<int, List<byte[]>> clientOrdersBuffer = new Dictionary<int, List<byte[]>>();
 
 		public void BufferOrders(int client, byte[] serializedOrderList)
 		{
-			List<byte[]> orderQueue;
-			if (!clientOrdersBuffer.TryGetValue(client, out orderQueue))
+			if (!clientOrdersBuffer.TryGetValue(client, out var orderQueue))
 				throw new InvalidOperationException("Tried to buffer orders for client that wasn't added");
 
 			orderQueue.Add(serializedOrderList);

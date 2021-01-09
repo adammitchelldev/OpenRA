@@ -84,7 +84,11 @@ namespace OpenRA.Network
 			}
 
 			foreach (var client in LobbyInfo.Clients)
-				frameData.AddClient(client.Index);
+			{
+				Console.WriteLine("Adding client {0}, isbot {1}".F(client.Index, client.IsBot));
+				if (!client.IsBot)
+					frameData.AddClient(client.Index);
+			}
 
 			// Generating sync reports is expensive, so only do it if we have
 			// other players to compare against if a desync did occur
