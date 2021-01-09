@@ -21,6 +21,7 @@ namespace OpenRA.Server
 		public const int MaxOrderLength = 131072;
 		public Socket Socket;
 		public List<byte> Data = new List<byte>();
+		public List<byte> SendBuffer = new List<byte>();
 		public ReceiveState State = ReceiveState.Header;
 		public int ExpectLength = 8;
 		public int Frame = 0;
@@ -119,6 +120,43 @@ namespace OpenRA.Server
 							}
 					}
 				}
+		}
+
+		public void SendData(byte[] data)
+		{
+			BufferData(data);
+			Flush();
+		}
+
+		public void BufferData(byte[] data)
+		{
+			SendBuffer.AddRange(data);
+		}
+
+		public void Flush()
+		{
+			var data = SendBuffer.ToArray();
+			SendBuffer.Clear();
+
+			var start = 0;
+			var length = data.Length;
+
+			// Non-blocking sends are free to send only part of the data
+			while (start < length)
+			{
+				var sent = Socket.Send(data, start, length - start, SocketFlags.None, out var error);
+				if (error == SocketError.WouldBlock)
+				{
+					Log.Write("server", "Non-blocking send of {0} bytes failed. Falling back to blocking send.", length - start);
+					Socket.Blocking = true;
+					sent = Socket.Send(data, start, length - start, SocketFlags.None);
+					Socket.Blocking = false;
+				}
+				else if (error != SocketError.Success)
+					throw new SocketException((int)error);
+
+				start += sent;
+			}
 		}
 	}
 

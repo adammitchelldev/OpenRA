@@ -38,28 +38,28 @@ namespace OpenRA.Server
 			OrderBuffer = new OrderBuffer();
 		}
 
-		public void TryTick(IFrameOrderDispatcher dispatcher)
+		public bool TryTick(IFrameOrderDispatcher dispatcher)
 		{
 			var now = RunTime;
-			if (now >= NextFrameTick)
-			{
-				OrderBuffer.DispatchOrders(dispatcher);
+			if (now < NextFrameTick)
+				return false;
 
-				CurrentNetFrame++;
-				if (now - NextFrameTick > JankThreshold)
-					NextFrameTick = now + AdjustedTimestep;
-				else
-					NextFrameTick += AdjustedTimestep;
+			OrderBuffer.DispatchOrders(dispatcher);
 
-				if (slowdownHold > 0)
-					slowdownHold--;
+			CurrentNetFrame++;
+			if (now - NextFrameTick > JankThreshold)
+				NextFrameTick = now + AdjustedTimestep;
+			else
+				NextFrameTick += AdjustedTimestep;
 
-				if (slowdownHold == 0 && slowdownAmount > 0)
-					slowdownAmount = slowdownAmount - (slowdownAmount / 4) - 1;
-			}
+			if (slowdownHold > 0)
+				slowdownHold--;
+
+			if (slowdownHold == 0 && slowdownAmount > 0)
+				slowdownAmount = slowdownAmount - (slowdownAmount / 4) - 1;
+
+			return true;
 		}
-
-		Dictionary<int, int> slowdowns = new Dictionary<int, int>();
 
 		public void SlowDown(int amount)
 		{

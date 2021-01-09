@@ -50,8 +50,11 @@ namespace OpenRA.Network
 
 		public void AddFrameOrders(int clientId, byte[] orders)
 		{
-			if (!framePackets.ContainsKey(clientId))
-				throw new InvalidOperationException("Client must be added before submitting orders");
+			// HACK: Due to design we can actually receive client orders before the game start order
+			// has been acted on, since immediate orders are buffered, so not all clients will have
+			// been added yet. However, all clients are guaranteed to be added before the first
+			// frame is stepped since they are added in OrderManager.StartGame()
+			AddClient(clientId);
 
 			var frameData = framePackets[clientId];
 			frameData.Enqueue(orders);

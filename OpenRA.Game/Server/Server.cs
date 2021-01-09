@@ -99,29 +99,6 @@ namespace OpenRA.Server
 			c.Color = pr.LockColor ? pr.Color : c.PreferredColor;
 		}
 
-		static void SendData(Socket s, byte[] data)
-		{
-			var start = 0;
-			var length = data.Length;
-
-			// Non-blocking sends are free to send only part of the data
-			while (start < length)
-			{
-				var sent = s.Send(data, start, length - start, SocketFlags.None, out var error);
-				if (error == SocketError.WouldBlock)
-				{
-					Log.Write("server", "Non-blocking send of {0} bytes failed. Falling back to blocking send.", length - start);
-					s.Blocking = true;
-					sent = s.Send(data, start, length - start, SocketFlags.None);
-					s.Blocking = false;
-				}
-				else if (error != SocketError.Success)
-					throw new SocketException((int)error);
-
-				start += sent;
-			}
-		}
-
 		public void Shutdown()
 		{
 			State = ServerState.ShuttingDown;
@@ -322,7 +299,13 @@ namespace OpenRA.Server
 						t.Tick(this);
 
 					if (State == ServerState.GameStarted)
-						serverGame.TryTick(this);
+					{
+						if (serverGame.TryTick(this))
+						{
+							foreach (var c in Conns)
+								c.Flush();
+						}
+					}
 				}
 
 				foreach (var t in serverTraits.WithInterface<INotifyServerShutdown>())
@@ -383,7 +366,7 @@ namespace OpenRA.Server
 				var ms = new MemoryStream(8);
 				ms.WriteArray(BitConverter.GetBytes(ProtocolVersion.Handshake));
 				ms.WriteArray(BitConverter.GetBytes(newConn.PlayerIndex));
-				SendData(newConn.Socket, ms.ToArray());
+				newConn.SendData(ms.ToArray());
 
 				PreConns.Add(newConn);
 
@@ -669,7 +652,7 @@ namespace OpenRA.Server
 			}
 		}
 
-		void SendOrdersToClient(Connection c, int client, int frame, byte[] data)
+		void SendOrdersToClient(Connection c, int client, int frame, byte[] data, bool buffer = false)
 		{
 			try
 			{
@@ -678,7 +661,11 @@ namespace OpenRA.Server
 				ms.WriteArray(BitConverter.GetBytes(client));
 				ms.WriteArray(BitConverter.GetBytes(frame));
 				ms.WriteArray(data);
-				SendData(c.Socket, ms.ToArray());
+				var packet = ms.ToArray();
+				if (buffer)
+					c.BufferData(packet);
+				else
+					c.SendData(packet);
 			}
 			catch (Exception e)
 			{
@@ -783,12 +770,12 @@ namespace OpenRA.Server
 			}
 		}
 
-		public void DispatchOrdersToOtherClients(Connection conn, int frame, byte[] data)
+		public void DispatchOrdersToOtherClients(Connection conn, int frame, byte[] data, bool buffer = false)
 		{
 			var from = conn != null ? conn.PlayerIndex : 0;
 
 			foreach (var c in Conns.Except(conn).ToList())
-				SendOrdersToClient(c, from, frame, data);
+				SendOrdersToClient(c, from, frame, data, buffer);
 
 			/*
 			if (recorder != null)
@@ -815,7 +802,10 @@ namespace OpenRA.Server
 			var from = fakeFrom != null ? fakeFrom.PlayerIndex : 0;
 
 			foreach (var c in Conns.ToList())
+			{
 				SendOrdersToClient(c, from, frame, data);
+				c.Flush();
+			}
 
 			// TODO: Make this nicer
 			if (GameSave != null && fakeFrom != null)
@@ -833,7 +823,7 @@ namespace OpenRA.Server
 			else if (conn != null && data.Length != 0 && (OrderType)data[0] == OrderType.SyncHash)
 			{
 				// TODO: Find a less hacky way to deal with synchash relaying
-				DispatchOrdersToOtherClients(conn, frame, data);
+				DispatchOrdersToOtherClients(conn, frame, data, true);
 			}
 			else if (conn != null && State == ServerState.GameStarted)
 			{
@@ -855,7 +845,7 @@ namespace OpenRA.Server
 			}
 
 			Connection conn = Conns.FirstOrDefault(c => c.PlayerIndex == fromClient);
-			DispatchOrdersToOtherClients(conn, serverGame.CurrentNetFrame, ms.ToArray());
+			DispatchOrdersToOtherClients(conn, serverGame.CurrentNetFrame, ms.ToArray(), true);
 		}
 
 		public void DispatchBufferedOrderAcks(int forClient, int acks)
@@ -871,7 +861,7 @@ namespace OpenRA.Server
 			Connection conn = Conns.FirstOrDefault(c => c.PlayerIndex == forClient);
 
 			// Send acks to client from themselves
-			SendOrdersToClient(conn, forClient, serverGame.CurrentNetFrame, ms.ToArray());
+			SendOrdersToClient(conn, forClient, serverGame.CurrentNetFrame, ms.ToArray(), true);
 		}
 
 		void InterpretServerOrders(Connection conn, byte[] data)
