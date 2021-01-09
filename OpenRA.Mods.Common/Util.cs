@@ -88,13 +88,13 @@ namespace OpenRA.Mods.Common
 			return negative == 0 ? 0 : 256 - negative;
 		}
 
-		public static bool FacingWithinTolerance(WAngle facing, WAngle desiredFacing, int facingTolerance)
+		public static bool FacingWithinTolerance(WAngle facing, WAngle desiredFacing, WAngle facingTolerance)
 		{
-			if (facingTolerance == 0 && facing == desiredFacing)
+			if (facingTolerance.Angle == 0 && facing == desiredFacing)
 				return true;
 
 			var delta = (desiredFacing - facing).Angle;
-			return delta <= facingTolerance || delta >= 1024 - facingTolerance;
+			return delta <= facingTolerance.Angle || delta >= 1024 - facingTolerance.Angle;
 		}
 
 		public static WPos BetweenCells(World w, CPos from, CPos to)
@@ -162,7 +162,7 @@ namespace OpenRA.Mods.Common
 			return cells.SelectMany(c => Neighbours(c, allowDiagonal)).Distinct();
 		}
 
-		public static IEnumerable<CPos> AdjacentCells(World w, Target target)
+		public static IEnumerable<CPos> AdjacentCells(World w, in Target target)
 		{
 			var cells = target.Positions.Select(p => w.Map.CellContaining(p)).Distinct();
 			return ExpandFootprint(cells, true);
@@ -217,6 +217,9 @@ namespace OpenRA.Mods.Common
 
 			if (t.IsGenericType && t.GetGenericTypeDefinition().GetInterfaces().Any(e => e.IsGenericType && e.GetGenericTypeDefinition() == typeof(IEnumerable<>)))
 				return "Collection of {0}".F(FriendlyTypeName(t.GetGenericArguments().First()));
+
+			if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Nullable<>))
+				return "{0} (optional)".F(t.GetGenericArguments().Select(FriendlyTypeName).First());
 
 			if (t == typeof(int) || t == typeof(uint))
 				return "Integer";

@@ -102,6 +102,10 @@ namespace OpenRA.Mods.Common.Traits
 		public readonly Player Player;
 
 		readonly Predicate<Actor> unitCannotBeOrdered;
+		readonly List<Actor> unitsHangingAroundTheBase = new List<Actor>();
+
+		// Units that the bot already knows about. Any unit not on this list needs to be given a role.
+		readonly List<Actor> activeUnits = new List<Actor>();
 
 		public List<Squad> Squads = new List<Squad>();
 
@@ -110,10 +114,6 @@ namespace OpenRA.Mods.Common.Traits
 		IBotNotifyIdleBaseUnits[] notifyIdleBaseUnits;
 
 		CPos initialBaseCenter;
-		List<Actor> unitsHangingAroundTheBase = new List<Actor>();
-
-		// Units that the bot already knows about. Any unit not on this list needs to be given a role.
-		List<Actor> activeUnits = new List<Actor>();
 
 		int rushTicks;
 		int assignRolesTicks;
@@ -132,7 +132,7 @@ namespace OpenRA.Mods.Common.Traits
 		// Use for proactive targeting.
 		public bool IsPreferredEnemyUnit(Actor a)
 		{
-			if (a == null || a.IsDead || Player.Stances[a.Owner] != Stance.Enemy || a.Info.HasTraitInfo<HuskInfo>())
+			if (a == null || a.IsDead || Player.RelationshipWith(a.Owner) != PlayerRelationship.Enemy || a.Info.HasTraitInfo<HuskInfo>() || a.Info.HasTraitInfo<AircraftInfo>())
 				return false;
 
 			var targetTypes = a.GetEnabledTargetTypes();

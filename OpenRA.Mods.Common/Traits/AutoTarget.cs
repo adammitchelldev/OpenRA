@@ -294,7 +294,7 @@ namespace OpenRA.Mods.Common.Traits
 				{
 					// If we can't attack right now, there's no need to try and find a target.
 					var attackStances = ab.UnforcedAttackTargetStances();
-					if (attackStances != OpenRA.Traits.Stance.None)
+					if (attackStances != OpenRA.Traits.PlayerRelationship.None)
 					{
 						var range = Info.ScanRadius > 0 ? WDist.FromCells(Info.ScanRadius) : ab.GetMaximumRange();
 						return ChooseTarget(self, ab, attackStances, range, allowMove, allowTurn);
@@ -312,7 +312,7 @@ namespace OpenRA.Mods.Common.Traits
 				Attack(self, target, allowMove);
 		}
 
-		void Attack(Actor self, Target target, bool allowMove)
+		void Attack(Actor self, in Target target, bool allowMove)
 		{
 			foreach (var ab in ActiveAttackBases)
 				ab.AttackTarget(target, AttackSource.AutoTarget, false, allowMove);
@@ -326,7 +326,7 @@ namespace OpenRA.Mods.Common.Traits
 			return activeTargetPriorities.Any(ati =>
 			{
 				// Incompatible stances
-				if (!ati.ValidStances.HasStance(self.Owner.Stances[owner]))
+				if (!ati.ValidRelationships.HasStance(self.Owner.RelationshipWith(owner)))
 					return false;
 
 				// Incompatible target types
@@ -337,7 +337,7 @@ namespace OpenRA.Mods.Common.Traits
 			});
 		}
 
-		Target ChooseTarget(Actor self, AttackBase ab, Stance attackStances, WDist scanRange, bool allowMove, bool allowTurn)
+		Target ChooseTarget(Actor self, AttackBase ab, PlayerRelationship attackStances, WDist scanRange, bool allowMove, bool allowTurn)
 		{
 			var chosenTarget = Target.Invalid;
 			var chosenTargetPriority = int.MinValue;
@@ -362,7 +362,7 @@ namespace OpenRA.Mods.Common.Traits
 					// can bail early and avoid the more expensive targeting checks and armament selection. For groups of
 					// allied units, this helps significantly reduce the cost of auto target scans. This is important as
 					// these groups will continuously rescan their allies until an enemy finally comes into range.
-					if (attackStances == OpenRA.Traits.Stance.Enemy && !target.Actor.AppearsHostileTo(self))
+					if (attackStances == PlayerRelationship.Enemy && !target.Actor.AppearsHostileTo(self))
 						continue;
 
 					// Check whether we can auto-target this actor
@@ -375,7 +375,7 @@ namespace OpenRA.Mods.Common.Traits
 				}
 				else if (target.Type == TargetType.FrozenActor)
 				{
-					if (attackStances == OpenRA.Traits.Stance.Enemy && self.Owner.Stances[target.FrozenActor.Owner] == OpenRA.Traits.Stance.Ally)
+					if (attackStances == PlayerRelationship.Enemy && self.Owner.RelationshipWith(target.FrozenActor.Owner) == PlayerRelationship.Ally)
 						continue;
 
 					targetTypes = target.FrozenActor.TargetTypes;
@@ -391,7 +391,7 @@ namespace OpenRA.Mods.Common.Traits
 						return false;
 
 					// Incompatible stances
-					if (!ati.ValidStances.HasStance(self.Owner.Stances[owner]))
+					if (!ati.ValidRelationships.HasStance(self.Owner.RelationshipWith(owner)))
 						return false;
 
 					// Incompatible target types
@@ -414,7 +414,7 @@ namespace OpenRA.Mods.Common.Traits
 				if (!armaments.Any())
 					continue;
 
-				if (!allowTurn && !ab.TargetInFiringArc(self, target, 4 * ab.Info.FacingTolerance))
+				if (!allowTurn && !ab.TargetInFiringArc(self, target, ab.Info.FacingTolerance))
 					continue;
 
 				// Evaluate whether we want to target this actor

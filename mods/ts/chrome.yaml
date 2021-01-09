@@ -458,10 +458,11 @@ flags:
 lobby-bits:
 	Inherits: ^Glyphs
 	Regions:
-		spawn-unclaimed: 91, 119, 22, 22
-		spawn-claimed: 68, 119, 22, 22
+		spawn-claimed: 27, 119, 22, 22
+		spawn-unclaimed: 50, 119, 22, 22
+		spawn-disabled: 73, 119, 22, 22
 		admin: 170, 0, 6, 5
-		colorpicker: 68, 119, 22, 22
+		colorpicker: 27, 119, 22, 22
 		huepicker: 136, 0, 7, 15
 		kick: 153, 0, 11, 11
 		protected: 0, 17, 12, 13
@@ -679,23 +680,18 @@ scrollpanel-decorations:
 	Inherits: ^Glyphs
 	Regions:
 		down: 68, 17, 16, 16
-		down-pressed: 68, 17, 16, 16
 		down-disabled: 85, 17, 16, 16
 		up: 102, 17, 16, 16
-		up-pressed: 102, 17, 16, 16
 		up-disabled: 119, 17, 16, 16
 		right: 136, 17, 16, 16
-		right-pressed: 136, 17, 16, 16
 		right-disabled: 153, 17, 16, 16
 		left: 170, 17, 16, 16
-		left-pressed: 170, 17, 16, 16
 		left-disabled: 187, 17, 16, 16
 
 dropdown-decorations:
 	Inherits: ^Glyphs
 	Regions:
 		marker: 68, 17, 16, 16
-		marker-pressed: 68, 17, 16, 16
 		marker-disabled: 85, 17, 16, 16
 
 dropdown-separators:

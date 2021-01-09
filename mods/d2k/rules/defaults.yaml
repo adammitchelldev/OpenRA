@@ -250,7 +250,7 @@
 		Type: light
 	HiddenUnderFog:
 		Type: CenterPosition
-		AlwaysVisibleStances: None
+		AlwaysVisibleRelationships: None
 	Tooltip:
 		GenericName: Destroyed Unit
 	ScriptTriggers:
@@ -269,7 +269,7 @@
 		TargetTypes: Ground, Vehicle
 		RequiresForceFire: true
 	WithColoredOverlay@IDISABLE:
-		Palette: disabled
+		Color: 000000B4
 	Explodes:
 		Weapon: UnitExplodeMed
 		EmptyWeapon: UnitExplodeMed
@@ -376,7 +376,7 @@
 		UseLocation: true
 	HiddenUnderFog:
 		Type: GroundPosition
-		AlwaysVisibleStances: None
+		AlwaysVisibleRelationships: None
 	ActorLostNotification:
 	AttackMove:
 	WithFacingSpriteBody:
@@ -404,11 +404,12 @@
 		Type: Rectangle
 			TopLeft: -512, -512
 			BottomRight: 512, 512
-	Building:
+	D2kBuilding:
 		Dimensions: 1,1
 		Footprint: x
 		TerrainTypes: Rock, Concrete
 		BuildSounds: BUILD1.WAV
+		ConcretePrerequisites: global-auto-concrete
 	D2kActorPreviewPlaceBuildingPreview:
 		RequiresPrerequisites: !global-auto-concrete
 		OverridePalette: placebuilding
@@ -448,20 +449,6 @@
 		SellSounds: BUILD1.WAV
 	Guardable:
 		Range: 3c0
-	GrantConditionOnPrerequisite@AUTOCONCRETE:
-		Condition: auto-concrete
-		Prerequisites: global-auto-concrete
-	DamagedByTerrain:
-		RequiresCondition: !auto-concrete
-		Damage: 500
-		DamageInterval: 100
-		Terrain: Rock
-		DamageThreshold: 50
-		StartOnThreshold: true
-	LaysTerrain:
-		RequiresCondition: auto-concrete
-		TerrainTypes: Rock
-		Template: 88
 	ThrowsShrapnel:
 		Weapons: Debris, Debris2, Debris3, Debris4
 		Pieces: 2, 5
@@ -523,7 +510,7 @@
 ^DisableOnLowPower:
 	WithColoredOverlay@IDISABLE:
 		RequiresCondition: disabled
-		Palette: disabled
+		Color: 000000B4
 	GrantConditionOnPowerState@LOWPOWER:
 		Condition: lowpower
 		ValidPowerStates: Low, Critical

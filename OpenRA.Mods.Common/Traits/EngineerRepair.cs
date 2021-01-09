@@ -26,12 +26,15 @@ namespace OpenRA.Mods.Common.Traits
 		[VoiceReference]
 		public readonly string Voice = "Action";
 
+		[Desc("Color to use for the target line.")]
+		public readonly Color TargetLineColor = Color.Yellow;
+
 		[Desc("Behaviour when entering the structure.",
 			"Possible values are Exit, Suicide, Dispose.")]
 		public readonly EnterBehaviour EnterBehaviour = EnterBehaviour.Dispose;
 
-		[Desc("What diplomatic stances allow target to be repaired by this actor.")]
-		public readonly Stance ValidStances = Stance.Ally;
+		[Desc("What player relationship the target's owner needs to be repaired by this actor.")]
+		public readonly PlayerRelationship ValidRelationships = PlayerRelationship.Ally;
 
 		[Desc("Sound to play when repairing is done.")]
 		public readonly string RepairSound = null;
@@ -61,7 +64,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID != "EngineerRepair")
 				return null;
@@ -114,7 +117,7 @@ namespace OpenRA.Mods.Common.Traits
 				if (!engineerRepairable.Info.Types.IsEmpty && !engineerRepairable.Info.Types.Overlaps(info.Types))
 					return false;
 
-				if (!info.ValidStances.HasStance(self.Owner.Stances[target.Owner]))
+				if (!info.ValidRelationships.HasStance(target.Owner.RelationshipWith(self.Owner)))
 					return false;
 
 				if (target.GetDamageState() == DamageState.Undamaged)
@@ -136,7 +139,7 @@ namespace OpenRA.Mods.Common.Traits
 				if (!engineerRepairable.Types.IsEmpty && !engineerRepairable.Types.Overlaps(info.Types))
 					return false;
 
-				if (!info.ValidStances.HasStance(self.Owner.Stances[target.Owner]))
+				if (!info.ValidRelationships.HasStance(target.Owner.RelationshipWith(self.Owner)))
 					return false;
 
 				if (target.DamageState == DamageState.Undamaged)

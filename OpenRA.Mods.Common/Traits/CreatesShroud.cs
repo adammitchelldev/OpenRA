@@ -17,8 +17,8 @@ namespace OpenRA.Mods.Common.Traits
 {
 	public class CreatesShroudInfo : AffectsShroudInfo
 	{
-		[Desc("Stance the watching player needs to see the generated shroud.")]
-		public readonly Stance ValidStances = Stance.Neutral | Stance.Enemy;
+		[Desc("Relationship the watching player needs to see the generated shroud.")]
+		public readonly PlayerRelationship ValidRelationships = PlayerRelationship.Neutral | PlayerRelationship.Enemy;
 
 		public override object Create(ActorInitializer init) { return new CreatesShroud(init.Self, this); }
 	}
@@ -43,7 +43,7 @@ namespace OpenRA.Mods.Common.Traits
 
 		protected override void AddCellsToPlayerShroud(Actor self, Player p, PPos[] uv)
 		{
-			if (!info.ValidStances.HasStance(p.Stances[self.Owner]))
+			if (!info.ValidRelationships.HasStance(self.Owner.RelationshipWith(p)))
 				return;
 
 			p.Shroud.AddSource(this, Shroud.SourceType.Shroud, uv);

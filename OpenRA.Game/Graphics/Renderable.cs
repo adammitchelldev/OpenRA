@@ -9,6 +9,7 @@
  */
 #endregion
 
+using System;
 using OpenRA.Primitives;
 
 namespace OpenRA.Graphics
@@ -16,11 +17,9 @@ namespace OpenRA.Graphics
 	public interface IRenderable
 	{
 		WPos Pos { get; }
-		PaletteReference Palette { get; }
 		int ZOffset { get; }
 		bool IsDecoration { get; }
 
-		IRenderable WithPalette(PaletteReference newPalette);
 		IRenderable WithZOffset(int newOffset);
 		IRenderable OffsetBy(WVec offset);
 		IRenderable AsDecoration();
@@ -28,9 +27,28 @@ namespace OpenRA.Graphics
 		IFinalizedRenderable PrepareRender(WorldRenderer wr);
 	}
 
-	public interface ITintableRenderable
+	public interface IPalettedRenderable : IRenderable
 	{
-		IRenderable WithTint(float3 newTint);
+		PaletteReference Palette { get; }
+		IPalettedRenderable WithPalette(PaletteReference newPalette);
+	}
+
+	[Flags]
+	public enum TintModifiers
+	{
+		None = 0,
+		IgnoreWorldTint = 1,
+		ReplaceColor = 2
+	}
+
+	public interface IModifyableRenderable : IRenderable
+	{
+		float Alpha { get; }
+		float3 Tint { get; }
+		TintModifiers TintModifiers { get; }
+
+		IModifyableRenderable WithAlpha(float newAlpha);
+		IModifyableRenderable WithTint(in float3 newTint, TintModifiers newTintModifiers);
 	}
 
 	public interface IFinalizedRenderable

@@ -23,15 +23,16 @@ namespace OpenRA.Mods.Cnc.Traits
 	{
 		public readonly int Speed = 28;
 
-		[Desc("Facing to use when actor spawns. Only 64 and 192 supported.")]
+		[Desc("Facing to use when actor spawns. Only 256 and 768 supported.")]
 		public readonly WAngle InitialFacing = new WAngle(256);
 
-		[Desc("Facing to use for actor previews (map editor, color picker, etc). Only 64 and 192 supported.")]
+		[Desc("Facing to use for actor previews (map editor, color picker, etc). Only 256 and 768 supported.")]
 		public readonly WAngle PreviewFacing = new WAngle(256);
 
 		public override object Create(ActorInitializer init) { return new TDGunboat(init, this); }
 
 		public WAngle GetInitialFacing() { return InitialFacing; }
+		public Color GetTargetLineColor() { return Color.Green; }
 
 		IEnumerable<ActorInit> IActorPreviewInitInfo.ActorPreviewInits(ActorInfo ai, ActorPreviewType type)
 		{
@@ -202,16 +203,16 @@ namespace OpenRA.Mods.Cnc.Traits
 
 		public Activity MoveTo(CPos cell, int nearEnough = 0, Actor ignoreActor = null,
 			bool evaluateNearestMovableCell = false, Color? targetLineColor = null) { return null; }
-		public Activity MoveWithinRange(Target target, WDist range,
+		public Activity MoveWithinRange(in Target target, WDist range,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null) { return null; }
-		public Activity MoveWithinRange(Target target, WDist minRange, WDist maxRange,
+		public Activity MoveWithinRange(in Target target, WDist minRange, WDist maxRange,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null) { return null; }
-		public Activity MoveFollow(Actor self, Target target, WDist minRange, WDist maxRange,
+		public Activity MoveFollow(Actor self, in Target target, WDist minRange, WDist maxRange,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null) { return null; }
 		public Activity ReturnToCell(Actor self) { return null; }
-		public Activity MoveToTarget(Actor self, Target target,
+		public Activity MoveToTarget(Actor self, in Target target,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null) { return null; }
-		public Activity MoveIntoTarget(Actor self, Target target) { return null; }
+		public Activity MoveIntoTarget(Actor self, in Target target) { return null; }
 		public Activity VisualMove(Actor self, WPos fromPos, WPos toPos) { return null; }
 
 		public int EstimatedMoveDuration(Actor self, WPos fromPos, WPos toPos)
@@ -224,7 +225,7 @@ namespace OpenRA.Mods.Cnc.Traits
 		// Actors with TDGunboat always move
 		public MovementType CurrentMovementTypes { get { return MovementType.Horizontal; } set { } }
 
-		public bool CanEnterTargetNow(Actor self, Target target)
+		public bool CanEnterTargetNow(Actor self, in Target target)
 		{
 			return false;
 		}

@@ -77,7 +77,7 @@ namespace OpenRA.Mods.Common.Traits
 		public readonly string IncomingSpeechNotification = null;
 
 		[Desc("Defines to which players the timer is shown.")]
-		public readonly Stance DisplayTimerStances = Stance.None;
+		public readonly PlayerRelationship DisplayTimerRelationships = PlayerRelationship.None;
 
 		[Desc("Beacons are only supported on the Airstrike, Paratroopers, and Nuke powers")]
 		public readonly bool DisplayBeacon = false;
@@ -160,9 +160,6 @@ namespace OpenRA.Mods.Common.Traits
 
 		public virtual void SelectTarget(Actor self, string order, SupportPowerManager manager)
 		{
-			Game.Sound.PlayToPlayer(SoundType.UI, manager.Self.Owner, Info.SelectTargetSound);
-			Game.Sound.PlayNotification(self.World.Map.Rules, self.Owner, "Speech",
-				Info.SelectTargetSpeechNotification, self.Owner.Faction.InternalName);
 			self.World.OrderGenerator = new SelectGenericPowerTarget(order, manager, info.Cursor, MouseButton.Left);
 		}
 

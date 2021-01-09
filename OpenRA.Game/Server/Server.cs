@@ -303,7 +303,7 @@ namespace OpenRA.Server
 						if (serverGame.TryTick(this))
 						{
 							foreach (var c in Conns)
-								c.Flush();
+								c.Flush(this);
 						}
 					}
 				}
@@ -362,13 +362,19 @@ namespace OpenRA.Server
 				newConn.PlayerIndex = ChooseFreePlayerIndex();
 				newConn.AuthToken = token;
 
+				PreConns.Add(newConn);
+
 				// Send handshake and client index.
 				var ms = new MemoryStream(8);
 				ms.WriteArray(BitConverter.GetBytes(ProtocolVersion.Handshake));
 				ms.WriteArray(BitConverter.GetBytes(newConn.PlayerIndex));
-				newConn.SendData(ms.ToArray());
+				newConn.SendData(ms.ToArray(), this);
 
-				PreConns.Add(newConn);
+				if (!PreConns.Contains(newConn))
+				{
+					Log.Write("server", "Dropped client {0} because handshake failed", newConn.PlayerIndex.ToString(CultureInfo.InvariantCulture));
+					return;
+				}
 
 				// Dispatch a handshake order
 				var request = new HandshakeRequest
@@ -378,12 +384,18 @@ namespace OpenRA.Server
 					AuthToken = token
 				};
 
-				SendOrdersToClient(newConn, 0, 0, new Order("HandshakeRequest", null, false)
+				DispatchOrdersToClient(newConn, 0, 0, new Order("HandshakeRequest", null, false)
 				{
 					Type = OrderType.Handshake,
 					IsImmediate = true,
 					TargetString = request.Serialize()
 				}.Serialize());
+
+				if (!PreConns.Contains(newConn))
+				{
+					Log.Write("server", "Dropped client {0} because handshake failed: {1}", newConn.PlayerIndex.ToString(CultureInfo.InvariantCulture));
+					return;
+				}
 			}
 			catch (Exception e)
 			{
@@ -523,7 +535,7 @@ namespace OpenRA.Server
 
 						if (Type == ServerType.Dedicated)
 						{
-							var motdFile = Platform.ResolvePath(Platform.SupportDirPrefix, "motd.txt");
+							var motdFile = Path.Combine(Platform.SupportDir, "motd.txt");
 							if (!File.Exists(motdFile))
 								File.WriteAllText(motdFile, "Welcome, have fun and good luck!");
 
@@ -652,27 +664,29 @@ namespace OpenRA.Server
 			}
 		}
 
-		void SendOrdersToClient(Connection c, int client, int frame, byte[] data, bool buffer = false)
+		byte[] CreateFrame(int client, int frame, byte[] data)
 		{
-			try
+			using (var ms = new MemoryStream(data.Length + 12))
 			{
-				var ms = new MemoryStream(data.Length + 12);
 				ms.WriteArray(BitConverter.GetBytes(data.Length + 4));
 				ms.WriteArray(BitConverter.GetBytes(client));
 				ms.WriteArray(BitConverter.GetBytes(frame));
 				ms.WriteArray(data);
-				var packet = ms.ToArray();
-				if (buffer)
-					c.BufferData(packet);
-				else
-					c.SendData(packet);
+				return ms.GetBuffer();
 			}
-			catch (Exception e)
-			{
-				DropClient(c);
-				Log.Write("server", "Dropping client {0} because dispatching orders failed: {1}",
-					client.ToString(CultureInfo.InvariantCulture), e);
-			}
+		}
+
+		void DispatchOrdersToClient(Connection c, int client, int frame, byte[] data, bool buffer = false)
+		{
+			DispatchFrameToClient(c, CreateFrame(client, frame, data), buffer);
+		}
+
+		void DispatchFrameToClient(Connection c, byte[] frameData, bool buffer = false)
+		{
+			if (buffer)
+				c.BufferData(frameData);
+			else
+				c.SendData(frameData, this);
 		}
 
 		bool AnyUndefinedWinStates()
@@ -774,8 +788,9 @@ namespace OpenRA.Server
 		{
 			var from = conn != null ? conn.PlayerIndex : 0;
 
+			var frameData = CreateFrame(from, frame, data);
 			foreach (var c in Conns.Except(conn).ToList())
-				SendOrdersToClient(c, from, frame, data, buffer);
+				DispatchFrameToClient(c, frameData, buffer);
 
 			/*
 			if (recorder != null)
@@ -801,11 +816,9 @@ namespace OpenRA.Server
 		{
 			var from = fakeFrom != null ? fakeFrom.PlayerIndex : 0;
 
+			var frameData = CreateFrame(from, frame, data);
 			foreach (var c in Conns.ToList())
-			{
-				SendOrdersToClient(c, from, frame, data);
-				c.Flush();
-			}
+				DispatchFrameToClient(c, frameData);
 
 			// TODO: Make this nicer
 			if (GameSave != null && fakeFrom != null)
@@ -861,7 +874,7 @@ namespace OpenRA.Server
 			Connection conn = Conns.FirstOrDefault(c => c.PlayerIndex == forClient);
 
 			// Send acks to client from themselves
-			SendOrdersToClient(conn, forClient, serverGame.CurrentNetFrame, ms.ToArray(), true);
+			DispatchOrdersToClient(conn, forClient, serverGame.CurrentNetFrame, ms.ToArray(), true);
 		}
 
 		void InterpretServerOrders(Connection conn, byte[] data)
@@ -884,7 +897,7 @@ namespace OpenRA.Server
 
 		public void SendOrderTo(Connection conn, string order, string data)
 		{
-			SendOrdersToClient(conn, 0, 0, Order.FromTargetString(order, data, true).Serialize());
+			DispatchOrdersToClient(conn, 0, 0, Order.FromTargetString(order, data, true).Serialize());
 		}
 
 		public void SendMessage(string text, Connection conn = null)
@@ -990,8 +1003,8 @@ namespace OpenRA.Server
 								while ((invalidIndex = filename.IndexOfAny(invalidChars)) != -1)
 									filename = filename.Remove(invalidIndex, 1);
 
-								var baseSavePath = Platform.ResolvePath(
-									Platform.SupportDirPrefix,
+								var baseSavePath = Path.Combine(
+									Platform.SupportDir,
 									"Saves",
 									ModData.Manifest.Id,
 									ModData.Manifest.Metadata.Version);
@@ -1018,8 +1031,8 @@ namespace OpenRA.Server
 							while ((invalidIndex = filename.IndexOfAny(invalidChars)) != -1)
 								filename = filename.Remove(invalidIndex, 1);
 
-							var savePath = Platform.ResolvePath(
-								Platform.SupportDirPrefix,
+							var savePath = Path.Combine(
+								Platform.SupportDir,
 								"Saves",
 								ModData.Manifest.Id,
 								ModData.Manifest.Metadata.Version,
@@ -1273,8 +1286,9 @@ namespace OpenRA.Server
 				// HACK: NonCombatant and non-Playable players are set to null to simplify replay tracking
 				// The null padding is needed to keep the player indexes in sync with world.Players on the clients
 				// This will need to change if future code wants to use worldPlayers for other purposes
+				var playerRandom = new MersenneTwister(LobbyInfo.GlobalSettings.RandomSeed);
 				foreach (var cmpi in Map.Rules.Actors["world"].TraitInfos<ICreatePlayersInfo>())
-					cmpi.CreateServerPlayers(Map, LobbyInfo, worldPlayers);
+					cmpi.CreateServerPlayers(Map, LobbyInfo, worldPlayers, playerRandom);
 
 				if (recorder != null)
 				{
@@ -1307,7 +1321,7 @@ namespace OpenRA.Server
 				foreach (var c in Conns)
 				{
 					foreach (var d in Conns)
-						SendOrdersToClient(c, d.PlayerIndex, int.MaxValue, disconnectData);
+						DispatchOrdersToClient(c, d.PlayerIndex, int.MaxValue, disconnectData);
 
 					if (recorder != null)
 						recorder.ReceiveFrame(c.PlayerIndex, int.MaxValue, disconnectData);
@@ -1340,8 +1354,9 @@ namespace OpenRA.Server
 				{
 					GameSave.ParseOrders(LobbyInfo, (frame, client, data) =>
 					{
+						var frameData = CreateFrame(client, frame, data);
 						foreach (var c in Conns)
-							SendOrdersToClient(c, client, frame, data);
+							DispatchFrameToClient(c, frameData);
 					});
 				}
 			}

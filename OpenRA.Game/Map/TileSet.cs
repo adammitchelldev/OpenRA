@@ -221,25 +221,30 @@ namespace OpenRA
 
 		public byte GetTerrainIndex(TerrainTile r)
 		{
-			if (!Templates.TryGetValue(r.Type, out var tpl))
-				return defaultWalkableTerrainIndex;
-
-			if (tpl.Contains(r.Index))
-			{
-				var tile = tpl[r.Index];
-				if (tile != null && tile.TerrainType != byte.MaxValue)
-					return tile.TerrainType;
-			}
+			var tile = Templates[r.Type][r.Index];
+			if (tile.TerrainType != byte.MaxValue)
+				return tile.TerrainType;
 
 			return defaultWalkableTerrainIndex;
 		}
 
 		public TerrainTileInfo GetTileInfo(TerrainTile r)
 		{
-			if (!Templates.TryGetValue(r.Type, out var tpl))
-				return null;
-
-			return tpl.Contains(r.Index) ? tpl[r.Index] : null;
+			return Templates[r.Type][r.Index];
 		}
+
+		public bool TryGetTileInfo(TerrainTile r, out TerrainTileInfo info)
+		{
+			if (!Templates.TryGetValue(r.Type, out var tpl) || !tpl.Contains(r.Index))
+			{
+				info = null;
+				return false;
+			}
+
+			info = tpl[r.Index];
+			return info != null;
+		}
+
+		public TerrainTile DefaultTerrainTile { get { return new TerrainTile(Templates.First().Key, 0); } }
 	}
 }

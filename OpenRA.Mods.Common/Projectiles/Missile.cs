@@ -223,7 +223,8 @@ namespace OpenRA.Mods.Common.Projectiles
 			hFacing = args.Facing.Facing;
 			gravity = new WVec(0, 0, -info.Gravity);
 			targetPosition = args.PassiveTarget;
-			rangeLimit = info.RangeLimit != WDist.Zero ? info.RangeLimit : args.Weapon.Range;
+			var limit = info.RangeLimit != WDist.Zero ? info.RangeLimit : args.Weapon.Range;
+			rangeLimit = new WDist(Util.ApplyPercentageModifiers(limit.Length, args.RangeModifiers));
 			minLaunchSpeed = info.MinimumLaunchSpeed.Length > -1 ? info.MinimumLaunchSpeed.Length : info.Speed.Length;
 			maxLaunchSpeed = info.MaximumLaunchSpeed.Length > -1 ? info.MaximumLaunchSpeed.Length : info.Speed.Length;
 			maxSpeed = info.Speed.Length;
@@ -428,7 +429,7 @@ namespace OpenRA.Mods.Common.Projectiles
 			if ((tp.Actor.CenterPosition - pos).HorizontalLengthSquared > tp.Trait.Range.LengthSquared)
 				return false;
 
-			if (!tp.Trait.DeflectionStances.HasStance(tp.Actor.Owner.Stances[args.SourceActor.Owner]))
+			if (!tp.Trait.DeflectionStances.HasStance(tp.Actor.Owner.RelationshipWith(args.SourceActor.Owner)))
 				return false;
 
 			return tp.Actor.World.SharedRandom.Next(100) < tp.Trait.Chance;

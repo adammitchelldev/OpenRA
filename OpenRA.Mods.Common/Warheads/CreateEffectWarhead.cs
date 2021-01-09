@@ -46,6 +46,9 @@ namespace OpenRA.Mods.Common.Warheads
 		[Desc("Whether to consider actors in determining whether the explosion should happen. If false, only terrain will be considered.")]
 		public readonly bool ImpactActors = true;
 
+		[Desc("The maximum inaccuracy of the effect spawn position relative to actual impact position.")]
+		public readonly WDist Inaccuracy = WDist.Zero;
+
 		static readonly BitSet<TargetableType> TargetTypeAir = new BitSet<TargetableType>("Air");
 
 		/// <summary>Checks if there are any actors at impact position and if the warhead is valid against any of them.</summary>
@@ -76,8 +79,8 @@ namespace OpenRA.Mods.Common.Warheads
 		// (and to prevent returning ImpactActorType.Invalid on AffectsParent=false)
 		public override bool IsValidAgainst(Actor victim, Actor firedBy)
 		{
-			var stance = firedBy.Owner.Stances[victim.Owner];
-			if (!ValidStances.HasStance(stance))
+			var stance = firedBy.Owner.RelationshipWith(victim.Owner);
+			if (!ValidRelationships.HasStance(stance))
 				return false;
 
 			// A target type is valid if it is in the valid targets list, and not in the invalid targets list.
@@ -87,7 +90,7 @@ namespace OpenRA.Mods.Common.Warheads
 			return true;
 		}
 
-		public override void DoImpact(Target target, WarheadArgs args)
+		public override void DoImpact(in Target target, WarheadArgs args)
 		{
 			if (target.Type == TargetType.Invalid)
 				return;
@@ -109,6 +112,9 @@ namespace OpenRA.Mods.Common.Warheads
 			var explosion = Explosions.RandomOrDefault(world.LocalRandom);
 			if (Image != null && explosion != null)
 			{
+				if (Inaccuracy.Length > 0)
+					pos += WVec.FromPDF(world.SharedRandom, 2) * Inaccuracy.Length / 1024;
+
 				if (ForceDisplayAtGroundLevel)
 				{
 					var dat = world.Map.DistanceAboveTerrain(pos);

@@ -20,8 +20,8 @@ namespace OpenRA.Mods.Common.Traits
 	[Desc("This actor will remain visible (but not updated visually) under fog, once discovered.")]
 	public class FrozenUnderFogInfo : TraitInfo, Requires<BuildingInfo>, IDefaultVisibilityInfo
 	{
-		[Desc("Players with these stances can always see the actor.")]
-		public readonly Stance AlwaysVisibleStances = Stance.Ally;
+		[Desc("Players with these relationships can always see the actor.")]
+		public readonly PlayerRelationship AlwaysVisibleRelationships = PlayerRelationship.Ally;
 
 		public override object Create(ActorInitializer init) { return new FrozenUnderFog(init, this); }
 	}
@@ -105,8 +105,8 @@ namespace OpenRA.Mods.Common.Traits
 			if (byPlayer == null)
 				return true;
 
-			var stance = self.Owner.Stances[byPlayer];
-			return info.AlwaysVisibleStances.HasStance(stance) || IsVisibleInner(self, byPlayer);
+			var stance = self.Owner.RelationshipWith(byPlayer);
+			return info.AlwaysVisibleRelationships.HasStance(stance) || IsVisibleInner(self, byPlayer);
 		}
 
 		void ITick.Tick(Actor self)

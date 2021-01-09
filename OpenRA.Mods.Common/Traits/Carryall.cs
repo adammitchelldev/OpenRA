@@ -60,6 +60,9 @@ namespace OpenRA.Mods.Common.Traits
 		[VoiceReference]
 		public readonly string Voice = "Action";
 
+		[Desc("Color to use for the target line.")]
+		public readonly Color TargetLineColor = Color.Yellow;
+
 		public override object Create(ActorInitializer init) { return new Carryall(init.Self, this); }
 	}
 
@@ -285,7 +288,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID == "PickupUnit" || order.OrderID == "DeliverUnit" || order.OrderID == "Unload")
 				return new Order(order.OrderID, self, target, queued);
@@ -383,7 +386,7 @@ namespace OpenRA.Mods.Common.Traits
 			public string OrderID { get { return "DeliverUnit"; } }
 			public int OrderPriority { get { return 6; } }
 			public bool IsQueued { get; protected set; }
-			public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
+			public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
 
 			public CarryallDeliverUnitTargeter(AircraftInfo aircraftInfo, CarryallInfo info)
 			{
@@ -391,7 +394,7 @@ namespace OpenRA.Mods.Common.Traits
 				this.info = info;
 			}
 
-			public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 			{
 				if (!info.AllowDropOff || !modifiers.HasModifier(TargetModifiers.ForceMove))
 					return false;

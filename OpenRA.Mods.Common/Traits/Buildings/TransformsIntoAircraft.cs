@@ -40,6 +40,9 @@ namespace OpenRA.Mods.Common.Traits
 		[Desc("Cursor to display when unable to land at target building.")]
 		public readonly string EnterBlockedCursor = "enter-blocked";
 
+		[Desc("Color to use for the target line for regular move orders.")]
+		public readonly Color TargetLineColor = Color.Green;
+
 		public override object Create(ActorInitializer init) { return new TransformsIntoAircraft(init, this); }
 	}
 
@@ -93,7 +96,7 @@ namespace OpenRA.Mods.Common.Traits
 		}
 
 		// Note: Returns a valid order even if the unit can't move to the target
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID == "Enter" || order.OrderID == "Move")
 				return new Order(order.OrderID, self, target, queued);
@@ -111,8 +114,6 @@ namespace OpenRA.Mods.Common.Traits
 				var cell = self.World.Map.Clamp(self.World.Map.CellContaining(order.Target.CenterPosition));
 				if (!Info.MoveIntoShroud && !self.Owner.Shroud.IsExplored(cell))
 					return;
-
-				var target = Target.FromCell(self.World, cell);
 			}
 			else if (order.OrderString == "Enter")
 			{
@@ -121,8 +122,11 @@ namespace OpenRA.Mods.Common.Traits
 				if (order.Target.Type != TargetType.Actor)
 					return;
 
-				var targetActor = order.Target.Actor;
+				if (!AircraftCanEnter(order.Target.Actor))
+					return;
 			}
+			else
+				return;
 
 			var currentTransform = self.CurrentActivity as Transform;
 			var transform = transforms.FirstOrDefault(t => !t.IsTraitDisabled && !t.IsTraitPaused);
@@ -134,7 +138,7 @@ namespace OpenRA.Mods.Common.Traits
 			if (!order.Queued)
 				activity.NextActivity?.Cancel(self);
 
-			activity.Queue(new IssueOrderAfterTransform(order.OrderString, order.Target, Color.Green));
+			activity.Queue(new IssueOrderAfterTransform(order.OrderString, order.Target, Info.TargetLineColor));
 
 			if (currentTransform == null)
 				self.QueueActivity(order.Queued, activity);
@@ -168,7 +172,7 @@ namespace OpenRA.Mods.Common.Traits
 		{
 			readonly TransformsIntoAircraft aircraft;
 
-			public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers)
+			public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers)
 			{
 				// Always prioritise orders over selecting other peoples actors or own actors that are already selected
 				if (target.Type == TargetType.Actor && (target.Actor.Owner != self.Owner || self.World.Selection.Contains(target.Actor)))
@@ -186,7 +190,7 @@ namespace OpenRA.Mods.Common.Traits
 			public int OrderPriority { get { return 4; } }
 			public bool IsQueued { get; protected set; }
 
-			public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 			{
 				if (target.Type != TargetType.Terrain || (aircraft.Info.RequiresForceMove && !modifiers.HasModifier(TargetModifiers.ForceMove)))
 					return false;

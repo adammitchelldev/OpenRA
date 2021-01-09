@@ -66,7 +66,7 @@ namespace OpenRA.Mods.Common.Traits
 			: base(info)
 		{
 			health = self.Trait<IHealth>();
-			isNotActiveAlly = player => player.WinState != WinState.Undefined || player.Stances[self.Owner] != Stance.Ally;
+			isNotActiveAlly = player => player.WinState != WinState.Undefined || self.Owner.RelationshipWith(player) != PlayerRelationship.Ally;
 		}
 
 		[Sync]
@@ -77,6 +77,7 @@ namespace OpenRA.Mods.Common.Traits
 				var hash = 0;
 				foreach (var player in Repairers)
 					hash ^= Sync.HashPlayer(player);
+
 				return hash;
 			}
 		}
@@ -86,7 +87,6 @@ namespace OpenRA.Mods.Common.Traits
 			if (string.IsNullOrEmpty(Info.RepairCondition))
 				return;
 
-			var currentRepairers = Repairers.Count;
 			while (Repairers.Count > repairTokens.Count)
 				repairTokens.Push(self.GrantCondition(Info.RepairCondition));
 

@@ -77,8 +77,8 @@ namespace OpenRA.Mods.Cnc.Graphics
 			var size = new Size(su, sv);
 			var s = sheetBuilder.Allocate(size);
 			var t = sheetBuilder.Allocate(size);
-			OpenRA.Graphics.Util.FastCopyIntoChannel(s, colors);
-			OpenRA.Graphics.Util.FastCopyIntoChannel(t, normals);
+			OpenRA.Graphics.Util.FastCopyIntoChannel(s, colors, SpriteFrameType.Indexed8);
+			OpenRA.Graphics.Util.FastCopyIntoChannel(t, normals, SpriteFrameType.Indexed8);
 
 			// s and t are guaranteed to use the same sheet because
 			// of the custom voxel sheet allocation implementation
@@ -216,9 +216,10 @@ namespace OpenRA.Mods.Cnc.Graphics
 			HvaReader hva;
 			using (var s = fileSystem.Open(files.Vxl + ".vxl"))
 				vxl = new VxlReader(s);
+
 			using (var s = fileSystem.Open(files.Hva + ".hva"))
 				hva = new HvaReader(s, files.Hva + ".hva");
-			return new Voxel(this, vxl, hva);
+			return new Voxel(this, vxl, hva, files);
 		}
 
 		public Voxel Load(string vxl, string hva)

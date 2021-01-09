@@ -79,8 +79,8 @@ namespace OpenRA.Mods.Cnc.Traits
 		[Desc("The condition to grant to self while disguised.")]
 		public readonly string DisguisedCondition = null;
 
-		[Desc("What diplomatic stances can this actor disguise as.")]
-		public readonly Stance ValidStances = Stance.Ally | Stance.Neutral | Stance.Enemy;
+		[Desc("Player relationships the owner of the disguise target needs.")]
+		public readonly PlayerRelationship ValidRelationships = PlayerRelationship.Ally | PlayerRelationship.Neutral | PlayerRelationship.Enemy;
 
 		[Desc("Target types of actors that this actor disguise as.")]
 		public readonly BitSet<TargetableType> TargetTypes = new BitSet<TargetableType>("Disguise");
@@ -136,7 +136,7 @@ namespace OpenRA.Mods.Cnc.Traits
 			}
 		}
 
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID == "Disguise")
 				return new Order(order.OrderID, self, target, queued);
@@ -244,9 +244,9 @@ namespace OpenRA.Mods.Cnc.Traits
 			}
 		}
 
-		void INotifyAttack.PreparingAttack(Actor self, Target target, Armament a, Barrel barrel) { }
+		void INotifyAttack.PreparingAttack(Actor self, in Target target, Armament a, Barrel barrel) { }
 
-		void INotifyAttack.Attacking(Actor self, Target target, Armament a, Barrel barrel)
+		void INotifyAttack.Attacking(Actor self, in Target target, Armament a, Barrel barrel)
 		{
 			if (info.RevealDisguiseOn.HasFlag(RevealDisguiseType.Attack))
 				DisguiseAs(null);
@@ -298,9 +298,8 @@ namespace OpenRA.Mods.Cnc.Traits
 
 		public override bool CanTargetActor(Actor self, Actor target, TargetModifiers modifiers, ref string cursor)
 		{
-			var stance = self.Owner.Stances[target.Owner];
-
-			if (!info.ValidStances.HasStance(stance))
+			var stance = self.Owner.RelationshipWith(target.Owner);
+			if (!info.ValidRelationships.HasStance(stance))
 				return false;
 
 			return info.TargetTypes.Overlaps(target.GetAllTargetTypes());
@@ -308,9 +307,8 @@ namespace OpenRA.Mods.Cnc.Traits
 
 		public override bool CanTargetFrozenActor(Actor self, FrozenActor target, TargetModifiers modifiers, ref string cursor)
 		{
-			var stance = self.Owner.Stances[target.Owner];
-
-			if (!info.ValidStances.HasStance(stance))
+			var stance = self.Owner.RelationshipWith(target.Owner);
+			if (!info.ValidRelationships.HasStance(stance))
 				return false;
 
 			return info.TargetTypes.Overlaps(target.Info.GetAllTargetTypes());

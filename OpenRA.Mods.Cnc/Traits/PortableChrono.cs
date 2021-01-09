@@ -68,6 +68,9 @@ namespace OpenRA.Mods.Cnc.Traits
 		[Desc("Range circle border width.")]
 		public readonly float CircleBorderWidth = 3;
 
+		[Desc("Color to use for the target line.")]
+		public readonly Color TargetLineColor = Color.LawnGreen;
+
 		public override object Create(ActorInitializer init) { return new PortableChrono(init.Self, this); }
 	}
 
@@ -100,7 +103,7 @@ namespace OpenRA.Mods.Cnc.Traits
 			}
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID == "PortableChronoDeploy")
 			{
@@ -128,10 +131,10 @@ namespace OpenRA.Mods.Cnc.Traits
 
 				var cell = self.World.Map.CellContaining(order.Target.CenterPosition);
 				if (maxDistance != null)
-					self.QueueActivity(move.MoveWithinRange(order.Target, WDist.FromCells(maxDistance.Value), targetLineColor: Color.LawnGreen));
+					self.QueueActivity(move.MoveWithinRange(order.Target, WDist.FromCells(maxDistance.Value), targetLineColor: Info.TargetLineColor));
 
 				self.QueueActivity(new Teleport(self, cell, maxDistance, Info.KillCargo, Info.FlashScreen, Info.ChronoshiftSound));
-				self.QueueActivity(move.MoveTo(cell, 5, targetLineColor: Color.LawnGreen));
+				self.QueueActivity(move.MoveTo(cell, 5, targetLineColor: Info.TargetLineColor));
 				self.ShowTargetLines();
 			}
 		}
@@ -172,9 +175,9 @@ namespace OpenRA.Mods.Cnc.Traits
 		public string OrderID { get { return "PortableChronoTeleport"; } }
 		public int OrderPriority { get { return 5; } }
 		public bool IsQueued { get; protected set; }
-		public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
+		public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
 
-		public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+		public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 		{
 			if (modifiers.HasModifier(TargetModifiers.ForceMove))
 			{

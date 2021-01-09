@@ -78,17 +78,14 @@ namespace OpenRA.Mods.Common.Traits
 							for (var x = 0; x < TerrainTemplate.Size.X; x++)
 							{
 								var tile = new TerrainTile(TerrainTemplate.Id, (byte)i++);
-								var tileInfo = world.Map.Rules.TileSet.GetTileInfo(tile);
-
-								// Empty tile
-								if (tileInfo == null)
+								if (!world.Map.Rules.TileSet.TryGetTileInfo(tile, out var tileInfo))
 									continue;
 
 								var sprite = wr.Theater.TileSprite(tile, 0);
 								var offset = world.Map.Offset(new CVec(x, y), tileInfo.Height);
 								var palette = wr.Palette(TerrainTemplate.Palette ?? TileSet.TerrainPaletteInternalName);
 
-								terrainOrResourcePreview.Add(new SpriteRenderable(sprite, pos, offset, 0, palette, 1, false, false));
+								terrainOrResourcePreview.Add(new SpriteRenderable(sprite, pos, offset, 0, palette, 1, false));
 							}
 						}
 					}
@@ -99,7 +96,8 @@ namespace OpenRA.Mods.Common.Traits
 						var sprite = sequence.GetSprite(Resource.MaxDensity - 1);
 						var palette = wr.Palette(Resource.Palette);
 
-						terrainOrResourcePreview.Add(new SpriteRenderable(sprite, pos, WVec.Zero, 0, palette, 1, false, sequence.IgnoreWorldTint));
+						var tintModifiers = sequence.IgnoreWorldTint ? TintModifiers.IgnoreWorldTint : TintModifiers.None;
+						terrainOrResourcePreview.Add(new SpriteRenderable(sprite, pos, WVec.Zero, 0, palette, 1, false, tintModifiers));
 					}
 				}
 			}

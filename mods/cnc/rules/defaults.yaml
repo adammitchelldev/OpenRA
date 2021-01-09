@@ -51,7 +51,7 @@
 		Conditions:
 			250: rank-veteran
 			500: rank-veteran
-			800: rank-veteran
+			750: rank-veteran
 		LevelUpImage: crate-effects
 	GrantCondition@RANK-ELITE:
 		RequiresCondition: rank-veteran >= 3
@@ -93,7 +93,7 @@
 		Palette: effect
 		Position: BottomRight
 		Margin: 5, 6
-		ValidStances: Ally, Enemy, Neutral
+		ValidRelationships: Ally, Enemy, Neutral
 		RequiresCondition: rank-veteran == 1
 	WithDecoration@RANK-2:
 		Image: rank
@@ -101,7 +101,7 @@
 		Palette: effect
 		Position: BottomRight
 		Margin: 5, 6
-		ValidStances: Ally, Enemy, Neutral
+		ValidRelationships: Ally, Enemy, Neutral
 		RequiresCondition: rank-veteran == 2
 	WithDecoration@RANK-ELITE:
 		Image: rank
@@ -109,7 +109,7 @@
 		Palette: effect
 		Position: BottomRight
 		Margin: 5, 6
-		ValidStances: Ally, Enemy, Neutral
+		ValidRelationships: Ally, Enemy, Neutral
 		RequiresCondition: rank-elite
 
 ^InfantryExperienceHospitalHazmatOverrides:
@@ -468,6 +468,7 @@
 		Notification: CivilianKilled
 		NotifyAll: true
 	ScaredyCat:
+		AvoidTerrainTypes: Tiberium, BlueTiberium
 	Crushable:
 		CrushSound: squish2.aud
 	Voiced:
@@ -475,6 +476,7 @@
 	Wanders:
 		MinMoveDelay: 150
 		MaxMoveDelay: 750
+		AvoidTerrainTypes: Tiberium, BlueTiberium
 	MapEditorData:
 		Categories: Civilian infantry
 
@@ -606,7 +608,7 @@
 		UseLocation: true
 	HiddenUnderFog:
 		Type: GroundPosition
-		AlwaysVisibleStances: None
+		AlwaysVisibleRelationships: None
 	ActorLostNotification:
 	AttackMove:
 	WithShadow:
@@ -666,8 +668,8 @@
 	ActorPreviewPlaceBuildingPreview:
 		OverridePalette: placebuilding
 	SoundOnDamageTransition:
-		DamagedSounds: xplos.aud
-		DestroyedSounds: crumble.aud
+		DamagedSounds: xplobig4.aud
+		DestroyedSounds: crumble.aud, xplobig4.aud
 	WithSpriteBody:
 	Explodes:
 		Type: Footprint
@@ -995,7 +997,7 @@
 		Type: Light
 	HiddenUnderFog:
 		Type: CenterPosition
-		AlwaysVisibleStances: None
+		AlwaysVisibleRelationships: None
 	WithFacingSpriteBody:
 	HitShape:
 	MapEditorData:
@@ -1011,13 +1013,13 @@
 	CaptureManager:
 	Capturable:
 		Types: husk
-		ValidStances: Enemy, Neutral, Ally
+		ValidRelationships: Enemy, Neutral, Ally
 	TransformOnCapture:
 		ForceHealthPercentage: 25
 	Tooltip:
 		GenericName: Destroyed Vehicle
 	WithColoredOverlay@IDISABLE:
-		Palette: disabled
+		Color: 000000B4
 	ScriptTriggers:
 	Explodes:
 		Weapon: UnitExplodeSmall
@@ -1116,7 +1118,7 @@
 		ValidPowerStates: Low, Critical
 	WithColoredOverlay@IDISABLE:
 		RequiresCondition: lowpower
-		Palette: disabled
+		Color: 000000B4
 
 ^Selectable:
 	Selectable:

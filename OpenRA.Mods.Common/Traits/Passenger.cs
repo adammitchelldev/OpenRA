@@ -12,6 +12,7 @@
 using System.Collections.Generic;
 using OpenRA.Mods.Common.Activities;
 using OpenRA.Mods.Common.Orders;
+using OpenRA.Primitives;
 using OpenRA.Support;
 using OpenRA.Traits;
 
@@ -41,6 +42,9 @@ namespace OpenRA.Mods.Common.Traits
 
 		[VoiceReference]
 		public readonly string Voice = "Action";
+
+		[Desc("Color to use for the target line.")]
+		public readonly Color TargetLineColor = Color.Green;
 
 		[ConsumedConditionReference]
 		[Desc("Boolean expression defining the condition under which the regular (non-force) enter cursor is disabled.")]
@@ -85,7 +89,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID == "EnterTransport")
 				return new Order(order.OrderID, self, target, queued);
@@ -173,7 +177,7 @@ namespace OpenRA.Mods.Common.Traits
 			if (!IsCorrectCargoType(targetActor))
 				return;
 
-			self.QueueActivity(order.Queued, new RideTransport(self, order.Target));
+			self.QueueActivity(order.Queued, new RideTransport(self, order.Target, Info.TargetLineColor));
 			self.ShowTargetLines();
 		}
 

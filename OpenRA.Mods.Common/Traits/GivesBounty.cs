@@ -23,8 +23,8 @@ namespace OpenRA.Mods.Common.Traits
 		[Desc("Percentage of the killed actor's Cost or CustomSellValue to be given.")]
 		public readonly int Percentage = 10;
 
-		[Desc("Stance the attacking player needs to receive the bounty.")]
-		public readonly Stance ValidStances = Stance.Neutral | Stance.Enemy;
+		[Desc("Player relationships the attacking player needs to receive the bounty.")]
+		public readonly PlayerRelationship ValidRelationships = PlayerRelationship.Neutral | PlayerRelationship.Enemy;
 
 		[Desc("Whether to show a floating text announcing the won bounty.")]
 		public readonly bool ShowBounty = true;
@@ -64,7 +64,7 @@ namespace OpenRA.Mods.Common.Traits
 			if (e.Attacker == null || e.Attacker.Disposed || IsTraitDisabled)
 				return;
 
-			if (!Info.ValidStances.HasStance(e.Attacker.Owner.Stances[self.Owner]))
+			if (!Info.ValidRelationships.HasStance(e.Attacker.Owner.RelationshipWith(self.Owner)))
 				return;
 
 			if (!Info.DeathTypes.IsEmpty && !e.Damage.DamageTypes.Overlaps(Info.DeathTypes))

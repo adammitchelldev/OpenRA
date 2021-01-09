@@ -262,7 +262,7 @@ namespace OpenRA
 
 		public static void InitializeSettings(Arguments args)
 		{
-			Settings = new Settings(Platform.ResolvePath(Path.Combine(Platform.SupportDirPrefix, "settings.yaml")), args);
+			Settings = new Settings(Path.Combine(Platform.SupportDir, "settings.yaml"), args);
 		}
 
 		public static RunStatus InitializeAndRun(string[] args)
@@ -276,6 +276,10 @@ namespace OpenRA
 
 		static void Initialize(Arguments args)
 		{
+			var engineDirArg = args.GetValue("Engine.EngineDir", null);
+			if (!string.IsNullOrEmpty(engineDirArg))
+				Platform.OverrideEngineDir(engineDirArg);
+
 			var supportDirArg = args.GetValue("Engine.SupportDir", null);
 			if (!string.IsNullOrEmpty(supportDirArg))
 				Platform.OverrideSupportDir(supportDirArg);
@@ -285,7 +289,7 @@ namespace OpenRA
 			// Load the engine version as early as possible so it can be written to exception logs
 			try
 			{
-				EngineVersion = File.ReadAllText(Platform.ResolvePath(Path.Combine(".", "VERSION"))).Trim();
+				EngineVersion = File.ReadAllText(Path.Combine(Platform.EngineDir, "VERSION")).Trim();
 			}
 			catch { }
 
@@ -293,6 +297,7 @@ namespace OpenRA
 				EngineVersion = "Unknown";
 
 			Console.WriteLine("Engine version is {0}", EngineVersion);
+			Console.WriteLine("Runtime: {0}", Platform.RuntimeVersion);
 
 			// Special case handling of Game.Mod argument: if it matches a real filesystem path
 			// then we use this to override the mod search path, and replace it with the mod id
@@ -324,10 +329,17 @@ namespace OpenRA
 				Settings.Game.Platform = p;
 				try
 				{
-					var rendererPath = Platform.ResolvePath(Path.Combine(".", "OpenRA.Platforms." + p + ".dll"));
-					var assembly = Assembly.LoadFile(rendererPath);
+					var rendererPath = Path.Combine(Platform.BinDir, "OpenRA.Platforms." + p + ".dll");
 
+#if !MONO
+					var loader = new AssemblyLoader(rendererPath);
+					var platformType = loader.LoadDefaultAssembly().GetTypes().SingleOrDefault(t => typeof(IPlatform).IsAssignableFrom(t));
+
+#else
+					var assembly = Assembly.LoadFile(rendererPath);
 					var platformType = assembly.GetTypes().SingleOrDefault(t => typeof(IPlatform).IsAssignableFrom(t));
+#endif
+
 					if (platformType == null)
 						throw new InvalidOperationException("Platform dll must include exactly one IPlatform implementation.");
 
@@ -354,7 +366,7 @@ namespace OpenRA
 			var modSearchArg = args.GetValue("Engine.ModSearchPaths", null);
 			var modSearchPaths = modSearchArg != null ?
 				FieldLoader.GetValue<string[]>("Engine.ModsPath", modSearchArg) :
-				new[] { Path.Combine(".", "mods") };
+				new[] { Path.Combine(Platform.EngineDir, "mods") };
 
 			Mods = new InstalledMods(modSearchPaths, explicitModPaths);
 			Console.WriteLine("Internal mods:");
@@ -367,14 +379,24 @@ namespace OpenRA
 
 			if (modID != null && Mods.TryGetValue(modID, out _))
 			{
-				var launchPath = args.GetValue("Engine.LaunchPath", Assembly.GetEntryAssembly().Location);
+				var launchPath = args.GetValue("Engine.LaunchPath", null);
+				var launchArgs = new List<string>();
 
 				// Sanitize input from platform-specific launchers
 				// Process.Start requires paths to not be quoted, even if they contain spaces
-				if (launchPath.First() == '"' && launchPath.Last() == '"')
+				if (launchPath != null && launchPath.First() == '"' && launchPath.Last() == '"')
 					launchPath = launchPath.Substring(1, launchPath.Length - 2);
 
-				ExternalMods.Register(Mods[modID], launchPath, ModRegistration.User);
+				if (launchPath == null)
+				{
+					// When launching the assembly directly we must propagate the Engine.EngineDir argument if defined
+					// Platform-specific launchers are expected to manage this internally.
+					launchPath = Assembly.GetEntryAssembly().Location;
+					if (!string.IsNullOrEmpty(engineDirArg))
+						launchArgs.Add("Engine.EngineDir=\"" + engineDirArg + "\"");
+				}
+
+				ExternalMods.Register(Mods[modID], launchPath, launchArgs, ModRegistration.User);
 
 				if (ExternalMods.TryGetValue(ExternalMod.MakeKey(Mods[modID]), out var activeMod))
 					ExternalMods.ClearInvalidRegistrations(activeMod, ModRegistration.User);
@@ -423,7 +445,7 @@ namespace OpenRA
 
 			ModData = new ModData(Mods[mod], Mods, true);
 
-			LocalPlayerProfile = new LocalPlayerProfile(Platform.ResolvePath(Path.Combine("^", Settings.Game.AuthProfile)), ModData.Manifest.Get<PlayerDatabase>());
+			LocalPlayerProfile = new LocalPlayerProfile(Path.Combine(Platform.SupportDir, Settings.Game.AuthProfile), ModData.Manifest.Get<PlayerDatabase>());
 
 			if (!ModData.LoadScreen.BeforeLoad())
 				return;
@@ -462,6 +484,8 @@ namespace OpenRA
 
 			ChromeMetrics.TryGet("ChatMessageColor", out chatMessageColor);
 			ChromeMetrics.TryGet("SystemMessageColor", out systemMessageColor);
+			if (!ChromeMetrics.TryGet("SystemMessageLabel", out systemMessageLabel))
+				systemMessageLabel = "Battlefield Control";
 
 			ModData.LoadScreen.StartGame(args);
 		}
@@ -531,6 +555,8 @@ namespace OpenRA
 		static volatile ActionQueue delayedActions = new ActionQueue();
 		static Color systemMessageColor = Color.White;
 		static Color chatMessageColor = Color.White;
+		static string systemMessageLabel;
+
 		public static void RunAfterTick(Action a) { delayedActions.Add(a, RunTime); }
 		public static void RunAfterDelay(int delayMilliseconds, Action a) { delayedActions.Add(a, RunTime + delayMilliseconds); }
 
@@ -539,7 +565,7 @@ namespace OpenRA
 			using (new PerfTimer("Renderer.SaveScreenshot"))
 			{
 				var mod = ModData.Manifest.Metadata;
-				var directory = Platform.ResolvePath(Platform.SupportDirPrefix, "Screenshots", ModData.Manifest.Id, mod.Version);
+				var directory = Path.Combine(Platform.SupportDir, "Screenshots", ModData.Manifest.Id, mod.Version);
 				Directory.CreateDirectory(directory);
 
 				var filename = TimestampedFilename(true);
@@ -875,7 +901,7 @@ namespace OpenRA
 
 		public static void AddSystemLine(string text)
 		{
-			AddSystemLine("Battlefield Control", text);
+			AddSystemLine(systemMessageLabel, text);
 		}
 
 		public static void AddSystemLine(string name, string text)
@@ -933,9 +959,11 @@ namespace OpenRA
 				AdvertiseOnline = false
 			};
 
+			// Always connect to local games using the same loopback connection
+			// Exposing multiple endpoints introduces a race condition on the client's PlayerIndex (sometimes 0, sometimes 1)
+			// This would break the Restart button, which relies on the PlayerIndex always being the same for local servers
 			var endpoints = new List<IPEndPoint>
 			{
-				new IPEndPoint(IPAddress.IPv6Loopback, 0),
 				new IPEndPoint(IPAddress.Loopback, 0)
 			};
 			server = new Server.Server(endpoints, settings, ModData, ServerType.Local);

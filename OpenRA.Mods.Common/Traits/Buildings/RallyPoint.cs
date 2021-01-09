@@ -75,13 +75,7 @@ namespace OpenRA.Mods.Common.Traits
 
 		void INotifyCreated.Created(Actor self)
 		{
-			// Display only the first level of priority
-			var priorityExits = self.Info.TraitInfos<ExitInfo>()
-				.GroupBy(e => e.Priority)
-				.FirstOrDefault();
-
-			var exits = priorityExits != null ? priorityExits.ToArray() : new ExitInfo[0];
-			self.World.Add(new RallyPointIndicator(self, this, exits));
+			self.World.Add(new RallyPointIndicator(self, this));
 		}
 
 		public void OnOwnerChanged(Actor self, Player oldOwner, Player newOwner)
@@ -97,7 +91,7 @@ namespace OpenRA.Mods.Common.Traits
 			get { yield return new RallyPointOrderTargeter(Info.Cursor); }
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID == OrderID)
 			{
@@ -140,11 +134,11 @@ namespace OpenRA.Mods.Common.Traits
 
 			public string OrderID { get { return "SetRallyPoint"; } }
 			public int OrderPriority { get { return 0; } }
-			public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
+			public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
 			public bool ForceSet { get; private set; }
 			public bool IsQueued { get; protected set; }
 
-			public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 			{
 				if (target.Type != TargetType.Terrain)
 					return false;

@@ -34,6 +34,9 @@ namespace OpenRA.Mods.Common.Traits
 		[VoiceReference]
 		public readonly string Voice = "Action";
 
+		[Desc("Color to use for the target line for regular move orders.")]
+		public readonly Color TargetLineColor = Color.Green;
+
 		[Desc("Require the force-move modifier to display the move cursor.")]
 		public readonly bool RequiresForceMove = false;
 
@@ -84,7 +87,7 @@ namespace OpenRA.Mods.Common.Traits
 		}
 
 		// Note: Returns a valid order even if the unit can't move to the target
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order is MoveOrderTargeter)
 				return new Order("Move", self, target, queued);
@@ -113,7 +116,7 @@ namespace OpenRA.Mods.Common.Traits
 				if (!order.Queued)
 					activity.NextActivity?.Cancel(self);
 
-				activity.Queue(new IssueOrderAfterTransform("Move", order.Target, Color.Green));
+				activity.Queue(new IssueOrderAfterTransform("Move", order.Target, Info.TargetLineColor));
 
 				if (currentTransform == null)
 					self.QueueActivity(order.Queued, activity);
@@ -159,7 +162,7 @@ namespace OpenRA.Mods.Common.Traits
 		{
 			readonly TransformsIntoMobile mobile;
 			readonly bool rejectMove;
-			public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers)
+			public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers)
 			{
 				// Always prioritise orders over selecting other peoples actors or own actors that are already selected
 				if (target.Type == TargetType.Actor && (target.Actor.Owner != self.Owner || self.World.Selection.Contains(target.Actor)))
@@ -178,7 +181,7 @@ namespace OpenRA.Mods.Common.Traits
 			public int OrderPriority { get { return 4; } }
 			public bool IsQueued { get; protected set; }
 
-			public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 			{
 				if (rejectMove || target.Type != TargetType.Terrain || (mobile.Info.RequiresForceMove && !modifiers.HasModifier(TargetModifiers.ForceMove)))
 					return false;

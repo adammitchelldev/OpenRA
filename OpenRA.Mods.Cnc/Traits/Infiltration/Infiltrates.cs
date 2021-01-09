@@ -27,8 +27,11 @@ namespace OpenRA.Mods.Cnc.Traits
 		[VoiceReference]
 		public readonly string Voice = "Action";
 
-		[Desc("What diplomatic stances can be infiltrated by this actor.")]
-		public readonly Stance ValidStances = Stance.Neutral | Stance.Enemy;
+		[Desc("Color to use for the target line.")]
+		public readonly Color TargetLineColor = Color.Crimson;
+
+		[Desc("Player relationships the owner of the infiltration target needs.")]
+		public readonly PlayerRelationship ValidRelationships = PlayerRelationship.Neutral | PlayerRelationship.Enemy;
 
 		[Desc("Behaviour when entering the target.",
 			"Possible values are Exit, Suicide, Dispose.")]
@@ -63,7 +66,7 @@ namespace OpenRA.Mods.Cnc.Traits
 			}
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID != "Infiltrate")
 				return null;
@@ -92,16 +95,16 @@ namespace OpenRA.Mods.Cnc.Traits
 				? Info.Voice : null;
 		}
 
-		public bool CanInfiltrateTarget(Actor self, Target target)
+		public bool CanInfiltrateTarget(Actor self, in Target target)
 		{
 			switch (target.Type)
 			{
 				case TargetType.Actor:
 					return Info.Types.Overlaps(target.Actor.GetEnabledTargetTypes()) &&
-					       Info.ValidStances.HasStance(self.Owner.Stances[target.Actor.Owner]);
+					       Info.ValidRelationships.HasStance(self.Owner.RelationshipWith(target.Actor.Owner));
 				case TargetType.FrozenActor:
 					return target.FrozenActor.IsValid && Info.Types.Overlaps(target.FrozenActor.TargetTypes) &&
-					       Info.ValidStances.HasStance(self.Owner.Stances[target.FrozenActor.Owner]);
+					       Info.ValidRelationships.HasStance(self.Owner.RelationshipWith(target.FrozenActor.Owner));
 				default:
 					return false;
 			}
@@ -115,7 +118,7 @@ namespace OpenRA.Mods.Cnc.Traits
 			if (!CanInfiltrateTarget(self, order.Target))
 				return;
 
-			self.QueueActivity(order.Queued, new Infiltrate(self, order.Target, this));
+			self.QueueActivity(order.Queued, new Infiltrate(self, order.Target, this, Info.TargetLineColor));
 			self.ShowTargetLines();
 		}
 	}
@@ -132,9 +135,8 @@ namespace OpenRA.Mods.Cnc.Traits
 
 		public override bool CanTargetActor(Actor self, Actor target, TargetModifiers modifiers, ref string cursor)
 		{
-			var stance = self.Owner.Stances[target.Owner];
-
-			if (!info.ValidStances.HasStance(stance))
+			var stance = self.Owner.RelationshipWith(target.Owner);
+			if (!info.ValidRelationships.HasStance(stance))
 				return false;
 
 			return info.Types.Overlaps(target.GetAllTargetTypes());
@@ -142,9 +144,8 @@ namespace OpenRA.Mods.Cnc.Traits
 
 		public override bool CanTargetFrozenActor(Actor self, FrozenActor target, TargetModifiers modifiers, ref string cursor)
 		{
-			var stance = self.Owner.Stances[target.Owner];
-
-			if (!info.ValidStances.HasStance(stance))
+			var stance = self.Owner.RelationshipWith(target.Owner);
+			if (!info.ValidRelationships.HasStance(stance))
 				return false;
 
 			return info.Types.Overlaps(target.Info.GetAllTargetTypes());

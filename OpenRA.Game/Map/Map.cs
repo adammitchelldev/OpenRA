@@ -17,6 +17,7 @@ using System.Reflection;
 using System.Text;
 using OpenRA.FileFormats;
 using OpenRA.FileSystem;
+using OpenRA.Graphics;
 using OpenRA.Primitives;
 using OpenRA.Support;
 using OpenRA.Traits;
@@ -173,7 +174,6 @@ namespace OpenRA
 			new MapField("Voices", "VoiceDefinitions", required: false),
 			new MapField("Music", "MusicDefinitions", required: false),
 			new MapField("Notifications", "NotificationDefinitions", required: false),
-			new MapField("Translations", "TranslationDefinitions", required: false)
 		};
 
 		// Format versions
@@ -204,7 +204,8 @@ namespace OpenRA
 		public readonly MiniYaml VoiceDefinitions;
 		public readonly MiniYaml MusicDefinitions;
 		public readonly MiniYaml NotificationDefinitions;
-		public readonly MiniYaml TranslationDefinitions;
+
+		public readonly Dictionary<CPos, TerrainTile> ReplacedInvalidTerrainTiles = new Dictionary<CPos, TerrainTile>();
 
 		// Generated data
 		public readonly MapGrid Grid;
@@ -287,7 +288,6 @@ namespace OpenRA
 			this.modData = modData;
 			var size = new Size(width, height);
 			Grid = modData.Manifest.Get<MapGrid>();
-			var tileRef = new TerrainTile(tileset.Templates.First().Key, 0);
 
 			Title = "Name your map here";
 			Author = "Your name here";
@@ -310,7 +310,7 @@ namespace OpenRA
 				Tiles.CellEntryChanged += UpdateRamp;
 			}
 
-			Tiles.Clear(tileRef);
+			Tiles.Clear(tileset.DefaultTerrainTile);
 
 			PostInit();
 		}
@@ -430,12 +430,18 @@ namespace OpenRA
 			foreach (var uv in AllCells.MapCoords)
 				CustomTerrain[uv] = byte.MaxValue;
 
-			// Cache initial ramp state
+			// Replace invalid tiles and cache ramp state
 			var tileset = Rules.TileSet;
-			foreach (var uv in AllCells)
+			foreach (var uv in AllCells.MapCoords)
 			{
-				var tile = tileset.GetTileInfo(Tiles[uv]);
-				Ramp[uv] = tile != null ? tile.RampType : (byte)0;
+				if (!tileset.TryGetTileInfo(Tiles[uv], out var info))
+				{
+					ReplacedInvalidTerrainTiles[uv.ToCPos(this)] = Tiles[uv];
+					Tiles[uv] = tileset.DefaultTerrainTile;
+					info = tileset.GetTileInfo(tileset.DefaultTerrainTile);
+				}
+
+				Ramp[uv] = info.RampType;
 			}
 
 			AllEdgeCells = UpdateEdgeCells();
@@ -443,8 +449,7 @@ namespace OpenRA
 
 		void UpdateRamp(CPos cell)
 		{
-			var tile = Rules.TileSet.GetTileInfo(Tiles[cell]);
-			Ramp[cell] = tile != null ? tile.RampType : (byte)0;
+			Ramp[cell] = Rules.TileSet.GetTileInfo(Tiles[cell]).RampType;
 		}
 
 		void InitializeCellProjection()
@@ -670,32 +675,26 @@ namespace OpenRA
 			Color left, right;
 			var tileset = Rules.TileSet;
 			var type = tileset.GetTileInfo(Tiles[uv]);
-			if (type != null)
+			if (type.MinColor != type.MaxColor)
 			{
-				if (type.MinColor != type.MaxColor)
-				{
-					left = Exts.ColorLerp(Game.CosmeticRandom.NextFloat(), type.MinColor, type.MaxColor);
-					right = Exts.ColorLerp(Game.CosmeticRandom.NextFloat(), type.MinColor, type.MaxColor);
-				}
-				else
-					left = right = type.MinColor;
-
-				if (tileset.MinHeightColorBrightness != 1.0f || tileset.MaxHeightColorBrightness != 1.0f)
-				{
-					var scale = float2.Lerp(tileset.MinHeightColorBrightness, tileset.MaxHeightColorBrightness, Height[uv] * 1f / Grid.MaximumTerrainHeight);
-					left = Color.FromArgb((int)(scale * left.R).Clamp(0, 255), (int)(scale * left.G).Clamp(0, 255), (int)(scale * left.B).Clamp(0, 255));
-					right = Color.FromArgb((int)(scale * right.R).Clamp(0, 255), (int)(scale * right.G).Clamp(0, 255), (int)(scale * right.B).Clamp(0, 255));
-				}
+				left = Exts.ColorLerp(Game.CosmeticRandom.NextFloat(), type.MinColor, type.MaxColor);
+				right = Exts.ColorLerp(Game.CosmeticRandom.NextFloat(), type.MinColor, type.MaxColor);
 			}
 			else
-				left = right = Color.Black;
+				left = right = type.MinColor;
+
+			if (tileset.MinHeightColorBrightness != 1.0f || tileset.MaxHeightColorBrightness != 1.0f)
+			{
+				var scale = float2.Lerp(tileset.MinHeightColorBrightness, tileset.MaxHeightColorBrightness, Height[uv] * 1f / Grid.MaximumTerrainHeight);
+				left = Color.FromArgb((int)(scale * left.R).Clamp(0, 255), (int)(scale * left.G).Clamp(0, 255), (int)(scale * left.B).Clamp(0, 255));
+				right = Color.FromArgb((int)(scale * right.R).Clamp(0, 255), (int)(scale * right.G).Clamp(0, 255), (int)(scale * right.B).Clamp(0, 255));
+			}
 
 			return (left, right);
 		}
 
 		public byte[] SavePreview()
 		{
-			var tileset = Rules.TileSet;
 			var actorTypes = Rules.Actors.Values.Where(a => a.HasTraitInfo<IMapPreviewSignatureInfo>());
 			var actors = ActorDefinitions.Where(a => actorTypes.Where(ai => ai.Name == a.Value.Value).Any());
 			var positions = new List<(MPos Position, Color Color)>();
@@ -715,76 +714,73 @@ namespace OpenRA
 			foreach (var worldimpsi in worldimpsis)
 				worldimpsi.PopulateMapPreviewSignatureCells(this, worldActorInfo, null, positions);
 
-			using (var stream = new MemoryStream())
+			var isRectangularIsometric = Grid.Type == MapGridType.RectangularIsometric;
+
+			// Fudge the heightmap offset by adding as much extra as we need / can.
+			// This tries to correct for our incorrect assumption that MPos == PPos
+			var heightOffset = Math.Min(Grid.MaximumTerrainHeight, MapSize.Y - Bounds.Bottom);
+			var width = Bounds.Width;
+			var height = Bounds.Height + heightOffset;
+
+			var bitmapWidth = width;
+			if (isRectangularIsometric)
+				bitmapWidth = 2 * bitmapWidth - 1;
+
+			var stride = bitmapWidth * 4;
+			var pxStride = 4;
+			var minimapData = new byte[stride * height];
+			(Color Left, Color Right) terrainColor = default((Color, Color));
+
+			for (var y = 0; y < height; y++)
 			{
-				var isRectangularIsometric = Grid.Type == MapGridType.RectangularIsometric;
-
-				// Fudge the heightmap offset by adding as much extra as we need / can.
-				// This tries to correct for our incorrect assumption that MPos == PPos
-				var heightOffset = Math.Min(Grid.MaximumTerrainHeight, MapSize.Y - Bounds.Bottom);
-				var width = Bounds.Width;
-				var height = Bounds.Height + heightOffset;
-
-				var bitmapWidth = width;
-				if (isRectangularIsometric)
-					bitmapWidth = 2 * bitmapWidth - 1;
-
-				var stride = bitmapWidth * 4;
-				var pxStride = 4;
-				var minimapData = new byte[stride * height];
-				(Color Left, Color Right) terrainColor = default((Color, Color));
-
-				for (var y = 0; y < height; y++)
+				for (var x = 0; x < width; x++)
 				{
-					for (var x = 0; x < width; x++)
+					var uv = new MPos(x + Bounds.Left, y + Bounds.Top);
+
+					// FirstOrDefault will return a (MPos.Zero, Color.Transparent) if positions is empty
+					var actorColor = positions.FirstOrDefault(ap => ap.Position == uv).Color;
+					if (actorColor.A == 0)
+						terrainColor = GetTerrainColorPair(uv);
+
+					if (isRectangularIsometric)
 					{
-						var uv = new MPos(x + Bounds.Left, y + Bounds.Top);
-
-						// FirstOrDefault will return a (MPos.Zero, Color.Transparent) if positions is empty
-						var actorColor = positions.FirstOrDefault(ap => ap.Position == uv).Color;
-						if (actorColor.A == 0)
-							terrainColor = GetTerrainColorPair(uv);
-
-						if (isRectangularIsometric)
+						// Odd rows are shifted right by 1px
+						var dx = uv.V & 1;
+						var xOffset = pxStride * (2 * x + dx);
+						if (x + dx > 0)
 						{
-							// Odd rows are shifted right by 1px
-							var dx = uv.V & 1;
-							var xOffset = pxStride * (2 * x + dx);
-							if (x + dx > 0)
-							{
-								var z = y * stride + xOffset - pxStride;
-								var c = actorColor.A == 0 ? terrainColor.Left : actorColor;
-								minimapData[z++] = c.R;
-								minimapData[z++] = c.G;
-								minimapData[z++] = c.B;
-								minimapData[z] = c.A;
-							}
-
-							if (xOffset < stride)
-							{
-								var z = y * stride + xOffset;
-								var c = actorColor.A == 0 ? terrainColor.Right : actorColor;
-								minimapData[z++] = c.R;
-								minimapData[z++] = c.G;
-								minimapData[z++] = c.B;
-								minimapData[z] = c.A;
-							}
-						}
-						else
-						{
-							var z = y * stride + pxStride * x;
+							var z = y * stride + xOffset - pxStride;
 							var c = actorColor.A == 0 ? terrainColor.Left : actorColor;
 							minimapData[z++] = c.R;
 							minimapData[z++] = c.G;
 							minimapData[z++] = c.B;
 							minimapData[z] = c.A;
 						}
+
+						if (xOffset < stride)
+						{
+							var z = y * stride + xOffset;
+							var c = actorColor.A == 0 ? terrainColor.Right : actorColor;
+							minimapData[z++] = c.R;
+							minimapData[z++] = c.G;
+							minimapData[z++] = c.B;
+							minimapData[z] = c.A;
+						}
+					}
+					else
+					{
+						var z = y * stride + pxStride * x;
+						var c = actorColor.A == 0 ? terrainColor.Left : actorColor;
+						minimapData[z++] = c.R;
+						minimapData[z++] = c.G;
+						minimapData[z++] = c.B;
+						minimapData[z] = c.A;
 					}
 				}
-
-				var png = new Png(minimapData, bitmapWidth, height);
-				return png.Save();
 			}
+
+			var png = new Png(minimapData, SpriteFrameType.Rgba32, bitmapWidth, height);
+			return png.Save();
 		}
 
 		public bool Contains(CPos cell)

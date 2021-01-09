@@ -43,8 +43,8 @@ namespace OpenRA.Mods.Common.Traits
 		[Desc("Experience granted to the capturing player.")]
 		public readonly int PlayerExperience = 0;
 
-		[Desc("Stance that the structure's previous owner needs to have for the capturing player to receive Experience.")]
-		public readonly Stance PlayerExperienceStances = Stance.Enemy;
+		[Desc("Relationships that the structure's previous owner needs to have for the capturing player to receive Experience.")]
+		public readonly PlayerRelationship PlayerExperienceRelationships = PlayerRelationship.Enemy;
 
 		[Desc("Cursor to display when the health of the target actor is above the sabotage threshold.")]
 		public readonly string SabotageCursor = "capture";
@@ -57,6 +57,9 @@ namespace OpenRA.Mods.Common.Traits
 
 		[VoiceReference]
 		public readonly string Voice = "Action";
+
+		[Desc("Color to use for the target line.")]
+		public readonly Color TargetLineColor = Color.Crimson;
 
 		public override object Create(ActorInitializer init) { return new Captures(init.Self, this); }
 	}
@@ -82,7 +85,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID != "CaptureActor")
 				return null;
@@ -100,7 +103,7 @@ namespace OpenRA.Mods.Common.Traits
 			if (order.OrderString != "CaptureActor" || IsTraitDisabled)
 				return;
 
-			self.QueueActivity(order.Queued, new CaptureActor(self, order.Target));
+			self.QueueActivity(order.Queued, new CaptureActor(self, order.Target, Info.TargetLineColor));
 			self.ShowTargetLines();
 		}
 

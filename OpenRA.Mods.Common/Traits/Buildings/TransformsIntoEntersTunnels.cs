@@ -26,6 +26,9 @@ namespace OpenRA.Mods.Common.Traits
 		[Desc("Cursor to display when unable to enter target tunnel.")]
 		public readonly string EnterBlockedCursor = "enter-blocked";
 
+		[Desc("Color to use for the target line while in tunnels.")]
+		public readonly Color TargetLineColor = Color.Green;
+
 		[VoiceReference]
 		public readonly string Voice = "Action";
 
@@ -71,7 +74,7 @@ namespace OpenRA.Mods.Common.Traits
 			return self.CurrentActivity is Transform || transforms.Any(t => !t.IsTraitDisabled && !t.IsTraitPaused);
 		}
 
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID == "EnterTunnel")
 				return new Order(order.OrderID, self, target, queued) { SuppressVisualFeedback = true };
@@ -98,7 +101,7 @@ namespace OpenRA.Mods.Common.Traits
 			if (!order.Queued)
 				activity.NextActivity?.Cancel(self);
 
-			activity.Queue(new IssueOrderAfterTransform(order.OrderString, order.Target, Color.Green));
+			activity.Queue(new IssueOrderAfterTransform(order.OrderString, order.Target, Info.TargetLineColor));
 
 			if (currentTransform == null)
 				self.QueueActivity(order.Queued, activity);

@@ -20,15 +20,11 @@ namespace OpenRA.Mods.Cnc.AudioLoaders
 		bool IsAud(Stream s)
 		{
 			var start = s.Position;
-			s.Position += 10;
-			var readFlag = s.ReadByte();
+			s.Position += 11;
 			var readFormat = s.ReadByte();
 			s.Position = start;
 
-			if (!Enum.IsDefined(typeof(SoundFlags), readFlag))
-				return false;
-
-			return Enum.IsDefined(typeof(SoundFormat), readFormat);
+			return readFormat == (int)SoundFormat.ImaAdpcm;
 		}
 
 		bool ISoundLoader.TryParseSound(Stream stream, out ISoundFormat sound)
@@ -53,8 +49,8 @@ namespace OpenRA.Mods.Cnc.AudioLoaders
 
 	public sealed class AudFormat : ISoundFormat
 	{
-		public int Channels { get { return 1; } }
-		public int SampleBits { get { return 16; } }
+		public int Channels { get { return channels; } }
+		public int SampleBits { get { return sampleBits; } }
 		public int SampleRate { get { return sampleRate; } }
 		public float LengthInSeconds { get { return AudReader.SoundLength(sourceStream); } }
 		public Stream GetPCMInputStream() { return audStreamFactory(); }
@@ -62,13 +58,15 @@ namespace OpenRA.Mods.Cnc.AudioLoaders
 
 		readonly Stream sourceStream;
 		readonly Func<Stream> audStreamFactory;
+		readonly int channels;
+		readonly int sampleBits;
 		readonly int sampleRate;
 
 		public AudFormat(Stream stream)
 		{
 			sourceStream = stream;
 
-			if (!AudReader.LoadSound(stream, out audStreamFactory, out sampleRate))
+			if (!AudReader.LoadSound(stream, out audStreamFactory, out sampleRate, out sampleBits, out channels))
 				throw new InvalidDataException();
 		}
 	}

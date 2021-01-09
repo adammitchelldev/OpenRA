@@ -117,9 +117,13 @@ namespace OpenRA.Mods.Common.Traits
 			var items = previews.SelectMany(p => p.Render(worldRenderer, CenterPosition));
 			if (Selected)
 			{
-				var highlight = worldRenderer.Palette("highlight");
-				var overlay = items.Where(r => !r.IsDecoration)
-					.Select(r => r.WithPalette(highlight));
+				var overlay = items.Where(r => !r.IsDecoration && r is IModifyableRenderable)
+					.Select(r =>
+					{
+						var mr = (IModifyableRenderable)r;
+						return mr.WithTint(float3.Ones, mr.TintModifiers | TintModifiers.ReplaceColor).WithAlpha(0.5f);
+					});
+
 				return items.Concat(overlay);
 			}
 
@@ -212,6 +216,10 @@ namespace OpenRA.Mods.Common.Traits
 			{
 				var factionInit = init as FactionInit;
 				if (factionInit != null && factionInit.Value == Owner.Faction)
+					return false;
+
+				var healthInit = init as HealthInit;
+				if (healthInit != null && healthInit.Value == 100)
 					return false;
 
 				// TODO: Other default values will need to be filtered

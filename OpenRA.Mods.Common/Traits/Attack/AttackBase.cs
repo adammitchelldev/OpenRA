@@ -52,14 +52,14 @@ namespace OpenRA.Mods.Common.Traits
 		public readonly string Voice = "Action";
 
 		[Desc("Tolerance for attack angle. Range [0, 128], 128 covers 360 degrees.")]
-		public readonly int FacingTolerance = 128;
+		public readonly WAngle FacingTolerance = new WAngle(512);
 
 		public override void RulesetLoaded(Ruleset rules, ActorInfo ai)
 		{
 			base.RulesetLoaded(rules, ai);
 
-			if (FacingTolerance < 0 || FacingTolerance > 128)
-				throw new YamlException("Facing tolerance must be in range of [0, 128], 128 covers 360 degrees.");
+			if (FacingTolerance.Angle > 512)
+				throw new YamlException("Facing tolerance must be in range of [0, 512], 512 covers 360 degrees.");
 		}
 
 		public override abstract object Create(ActorInitializer init);
@@ -126,7 +126,7 @@ namespace OpenRA.Mods.Common.Traits
 			return () => armaments;
 		}
 
-		public bool TargetInFiringArc(Actor self, Target target, int facingTolerance)
+		public bool TargetInFiringArc(Actor self, in Target target, WAngle facingTolerance)
 		{
 			if (facing == null)
 				return true;
@@ -141,7 +141,7 @@ namespace OpenRA.Mods.Common.Traits
 			return Util.FacingWithinTolerance(facing.Facing, delta.Yaw, facingTolerance);
 		}
 
-		protected virtual bool CanAttack(Actor self, Target target)
+		protected virtual bool CanAttack(Actor self, in Target target)
 		{
 			if (!self.IsInWorld || IsTraitDisabled || IsTraitPaused)
 				return false;
@@ -162,7 +162,7 @@ namespace OpenRA.Mods.Common.Traits
 			return true;
 		}
 
-		public virtual void DoAttack(Actor self, Target target)
+		public virtual void DoAttack(Actor self, in Target target)
 		{
 			if (!CanAttack(self, target))
 				return;
@@ -186,7 +186,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order is AttackOrderTargeter)
 				return new Order(order.OrderID, self, target, queued);
@@ -226,9 +226,9 @@ namespace OpenRA.Mods.Common.Traits
 			return order.OrderString == attackOrderName || order.OrderString == forceAttackOrderName ? Info.Voice : null;
 		}
 
-		public abstract Activity GetAttackActivity(Actor self, AttackSource source, Target newTarget, bool allowMove, bool forceAttack, Color? targetLineColor = null);
+		public abstract Activity GetAttackActivity(Actor self, AttackSource source, in Target newTarget, bool allowMove, bool forceAttack, Color? targetLineColor = null);
 
-		public bool HasAnyValidWeapons(Target t, bool checkForCenterTargetingWeapons = false)
+		public bool HasAnyValidWeapons(in Target t, bool checkForCenterTargetingWeapons = false)
 		{
 			if (IsTraitDisabled)
 				return false;
@@ -247,7 +247,7 @@ namespace OpenRA.Mods.Common.Traits
 			return false;
 		}
 
-		public virtual WPos GetTargetPosition(WPos pos, Target target)
+		public virtual WPos GetTargetPosition(WPos pos, in Target target)
 		{
 			return HasAnyValidWeapons(target, true) ? target.CenterPosition : target.Positions.PositionClosestTo(pos);
 		}
@@ -298,7 +298,7 @@ namespace OpenRA.Mods.Common.Traits
 			return max;
 		}
 
-		public WDist GetMinimumRangeVersusTarget(Target target)
+		public WDist GetMinimumRangeVersusTarget(in Target target)
 		{
 			if (IsTraitDisabled)
 				return WDist.Zero;
@@ -324,7 +324,7 @@ namespace OpenRA.Mods.Common.Traits
 			return min != WDist.MaxValue ? min : WDist.Zero;
 		}
 
-		public WDist GetMaximumRangeVersusTarget(Target target)
+		public WDist GetMaximumRangeVersusTarget(in Target target)
 		{
 			if (IsTraitDisabled)
 				return WDist.Zero;
@@ -377,12 +377,11 @@ namespace OpenRA.Mods.Common.Traits
 
 			return Armaments.Where(a =>
 				!a.IsTraitDisabled
-				&& (owner == null || (forceAttack ? a.Info.ForceTargetStances : a.Info.TargetStances)
-					.HasStance(self.Owner.Stances[owner]))
+				&& (owner == null || (forceAttack ? a.Info.ForceTargetRelationships : a.Info.TargetRelationships).HasStance(self.Owner.RelationshipWith(owner)))
 				&& a.Weapon.IsValidAgainst(t, self.World, self));
 		}
 
-		public void AttackTarget(Target target, AttackSource source, bool queued, bool allowMove, bool forceAttack = false, Color? targetLineColor = null)
+		public void AttackTarget(in Target target, AttackSource source, bool queued, bool allowMove, bool forceAttack = false, Color? targetLineColor = null)
 		{
 			if (IsTraitDisabled)
 				return;
@@ -395,21 +394,21 @@ namespace OpenRA.Mods.Common.Traits
 			OnResolveAttackOrder(self, activity, target, queued, forceAttack);
 		}
 
-		public virtual void OnResolveAttackOrder(Actor self, Activity activity, Target target, bool queued, bool forceAttack) { }
+		public virtual void OnResolveAttackOrder(Actor self, Activity activity, in Target target, bool queued, bool forceAttack) { }
 
-		public bool IsReachableTarget(Target target, bool allowMove)
+		public bool IsReachableTarget(in Target target, bool allowMove)
 		{
 			return HasAnyValidWeapons(target)
 				&& (target.IsInRange(self.CenterPosition, GetMaximumRangeVersusTarget(target)) || (allowMove && self.Info.HasTraitInfo<IMoveInfo>()));
 		}
 
-		public Stance UnforcedAttackTargetStances()
+		public PlayerRelationship UnforcedAttackTargetStances()
 		{
 			// PERF: Avoid LINQ.
-			var stances = Stance.None;
+			var stances = PlayerRelationship.None;
 			foreach (var armament in Armaments)
 				if (!armament.IsTraitDisabled)
-					stances |= armament.Info.TargetStances;
+					stances |= armament.Info.TargetRelationships;
 
 			return stances;
 		}
@@ -427,9 +426,9 @@ namespace OpenRA.Mods.Common.Traits
 
 			public string OrderID { get; private set; }
 			public int OrderPriority { get; private set; }
-			public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
+			public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
 
-			bool CanTargetActor(Actor self, Target target, ref TargetModifiers modifiers, ref string cursor)
+			bool CanTargetActor(Actor self, in Target target, ref TargetModifiers modifiers, ref string cursor)
 			{
 				IsQueued = modifiers.HasModifier(TargetModifiers.ForceQueue);
 
@@ -444,7 +443,7 @@ namespace OpenRA.Mods.Common.Traits
 				// targeting and attacking logic (which should be logically separate)
 				// to use the same code
 				if (target.Type == TargetType.Actor && target.Actor.EffectiveOwner != null &&
-						target.Actor.EffectiveOwner.Disguised && self.Owner.Stances[target.Actor.Owner] == Stance.Enemy)
+						target.Actor.EffectiveOwner.Disguised && self.Owner.RelationshipWith(target.Actor.Owner) == PlayerRelationship.Enemy)
 					modifiers |= TargetModifiers.ForceAttack;
 
 				var forceAttack = modifiers.HasModifier(TargetModifiers.ForceAttack);
@@ -505,7 +504,7 @@ namespace OpenRA.Mods.Common.Traits
 				return true;
 			}
 
-			public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 			{
 				switch (target.Type)
 				{

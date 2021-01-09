@@ -20,18 +20,18 @@ namespace OpenRA.Graphics
 		// yes, our channel order is nuts.
 		static readonly int[] ChannelMasks = { 2, 1, 0, 3 };
 
-		public static void FastCreateQuad(Vertex[] vertices, float3 o, Sprite r, int2 samplers, float paletteTextureIndex, int nv, float3 size, float3 tint)
+		public static void FastCreateQuad(Vertex[] vertices, in float3 o, Sprite r, int2 samplers, float paletteTextureIndex, int nv, in float3 size, in float3 tint, float alpha)
 		{
 			var b = new float3(o.X + size.X, o.Y, o.Z);
 			var c = new float3(o.X + size.X, o.Y + size.Y, o.Z + size.Z);
 			var d = new float3(o.X, o.Y + size.Y, o.Z + size.Z);
-			FastCreateQuad(vertices, o, b, c, d, r, samplers, paletteTextureIndex, tint, nv);
+			FastCreateQuad(vertices, o, b, c, d, r, samplers, paletteTextureIndex, tint, alpha, nv);
 		}
 
 		public static void FastCreateQuad(Vertex[] vertices,
-			float3 a, float3 b, float3 c, float3 d,
+			in float3 a, in float3 b, in float3 c, in float3 d,
 			Sprite r, int2 samplers, float paletteTextureIndex,
-			float3 tint, int nv)
+			in float3 tint, float alpha, int nv)
 		{
 			float sl = 0;
 			float st = 0;
@@ -54,15 +54,15 @@ namespace OpenRA.Graphics
 			}
 
 			var fAttribC = (float)attribC;
-			vertices[nv] = new Vertex(a, r.Left, r.Top, sl, st, paletteTextureIndex, fAttribC, tint);
-			vertices[nv + 1] = new Vertex(b, r.Right, r.Top, sr, st, paletteTextureIndex, fAttribC, tint);
-			vertices[nv + 2] = new Vertex(c, r.Right, r.Bottom, sr, sb, paletteTextureIndex, fAttribC, tint);
-			vertices[nv + 3] = new Vertex(c, r.Right, r.Bottom, sr, sb, paletteTextureIndex, fAttribC, tint);
-			vertices[nv + 4] = new Vertex(d, r.Left, r.Bottom, sl, sb, paletteTextureIndex, fAttribC, tint);
-			vertices[nv + 5] = new Vertex(a, r.Left, r.Top, sl, st, paletteTextureIndex, fAttribC, tint);
+			vertices[nv] = new Vertex(a, r.Left, r.Top, sl, st, paletteTextureIndex, fAttribC, tint, alpha);
+			vertices[nv + 1] = new Vertex(b, r.Right, r.Top, sr, st, paletteTextureIndex, fAttribC, tint, alpha);
+			vertices[nv + 2] = new Vertex(c, r.Right, r.Bottom, sr, sb, paletteTextureIndex, fAttribC, tint, alpha);
+			vertices[nv + 3] = new Vertex(c, r.Right, r.Bottom, sr, sb, paletteTextureIndex, fAttribC, tint, alpha);
+			vertices[nv + 4] = new Vertex(d, r.Left, r.Bottom, sl, sb, paletteTextureIndex, fAttribC, tint, alpha);
+			vertices[nv + 5] = new Vertex(a, r.Left, r.Top, sl, st, paletteTextureIndex, fAttribC, tint, alpha);
 		}
 
-		public static void FastCopyIntoChannel(Sprite dest, byte[] src)
+		public static void FastCopyIntoChannel(Sprite dest, byte[] src, SpriteFrameType srcType)
 		{
 			var destData = dest.Sheet.GetData();
 			var width = dest.Bounds.Width;
@@ -85,12 +85,34 @@ namespace OpenRA.Graphics
 						{
 							for (var i = 0; i < width; i++)
 							{
-								var r = src[k++];
-								var g = src[k++];
-								var b = src[k++];
-								var a = src[k++];
-								var cc = Color.FromArgb(a, r, g, b);
+								byte r, g, b, a;
+								switch (srcType)
+								{
+									case SpriteFrameType.Bgra32:
+									case SpriteFrameType.Bgr24:
+									{
+										b = src[k++];
+										g = src[k++];
+										r = src[k++];
+										a = srcType == SpriteFrameType.Bgra32 ? src[k++] : (byte)255;
+										break;
+									}
 
+									case SpriteFrameType.Rgba32:
+									case SpriteFrameType.Rgb24:
+									{
+										r = src[k++];
+										g = src[k++];
+										b = src[k++];
+										a = srcType == SpriteFrameType.Rgba32 ? src[k++] : (byte)255;
+										break;
+									}
+
+									default:
+										throw new InvalidOperationException("Unknown SpriteFrameType {0}".F(srcType));
+								}
+
+								var cc = Color.FromArgb(a, r, g, b);
 								data[(y + j) * destStride + x + i] = PremultiplyAlpha(cc).ToArgb();
 							}
 						}
@@ -139,16 +161,29 @@ namespace OpenRA.Graphics
 						for (var i = 0; i < width; i++)
 						{
 							Color cc;
-							if (src.Palette == null)
+							switch (src.Type)
 							{
-								var r = src.Data[k++];
-								var g = src.Data[k++];
-								var b = src.Data[k++];
-								var a = src.Data[k++];
-								cc = Color.FromArgb(a, r, g, b);
+								case SpriteFrameType.Indexed8:
+								{
+									cc = src.Palette[src.Data[k++]];
+									break;
+								}
+
+								case SpriteFrameType.Rgba32:
+								case SpriteFrameType.Rgb24:
+								{
+									var r = src.Data[k++];
+									var g = src.Data[k++];
+									var b = src.Data[k++];
+									var a = src.Type == SpriteFrameType.Rgba32 ? src.Data[k++] : (byte)255;
+									cc = Color.FromArgb(a, r, g, b);
+									break;
+								}
+
+								// Pngs don't support BGR[A], so no need to include them here
+								default:
+									throw new InvalidOperationException("Unknown SpriteFrameType {0}".F(src.Type));
 							}
-							else
-								cc = src.Palette[src.Data[k++]];
 
 							data[(y + j) * destStride + x + i] = PremultiplyAlpha(cc).ToArgb();
 						}

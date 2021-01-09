@@ -17,6 +17,7 @@ using OpenRA.Graphics;
 using OpenRA.Mods.Cnc.Activities;
 using OpenRA.Mods.Common.Orders;
 using OpenRA.Mods.Common.Traits;
+using OpenRA.Primitives;
 using OpenRA.Traits;
 
 namespace OpenRA.Mods.Cnc.Traits
@@ -33,6 +34,9 @@ namespace OpenRA.Mods.Cnc.Traits
 		[VoiceReference]
 		[Desc("Voice to use when ordered to lay a minefield.")]
 		public readonly string Voice = "Action";
+
+		[Desc("Color to use for the target line when laying mines.")]
+		public readonly Color TargetLineColor = Color.Crimson;
 
 		[Desc("Sprite overlay to use for valid minefield cells.")]
 		public readonly string TileValidName = "build-valid";
@@ -86,7 +90,7 @@ namespace OpenRA.Mods.Cnc.Traits
 			}
 		}
 
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			switch (order.OrderID)
 			{
@@ -283,7 +287,7 @@ namespace OpenRA.Mods.Cnc.Traits
 						|| !movement.CanEnterCell(c, null, BlockedByActor.Immovable) || (mobile != null && !mobile.CanStayInCell(c)))
 						tile = tileBlocked;
 
-					yield return new SpriteRenderable(tile, world.Map.CenterOfCell(c), WVec.Zero, -511, pal, 1f, true, true);
+					yield return new SpriteRenderable(tile, world.Map.CenterOfCell(c), WVec.Zero, -511, pal, 1f, true, TintModifiers.IgnoreWorldTint);
 				}
 			}
 
@@ -299,9 +303,9 @@ namespace OpenRA.Mods.Cnc.Traits
 		{
 			public string OrderID { get { return "BeginMinefield"; } }
 			public int OrderPriority { get { return 5; } }
-			public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
+			public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers) { return true; }
 
-			public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 			{
 				if (target.Type != TargetType.Terrain)
 					return false;

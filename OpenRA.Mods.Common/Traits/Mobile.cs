@@ -49,6 +49,9 @@ namespace OpenRA.Mods.Common.Traits
 		[VoiceReference]
 		public readonly string Voice = "Action";
 
+		[Desc("Color to use for the target line for regular move orders.")]
+		public readonly Color TargetLineColor = Color.Green;
+
 		[Desc("Facing to use for actor previews (map editor, color picker, etc)")]
 		public readonly WAngle PreviewFacing = new WAngle(384);
 
@@ -67,6 +70,8 @@ namespace OpenRA.Mods.Common.Traits
 		{
 			yield return new FacingInit(PreviewFacing);
 		}
+
+		public Color GetTargetLineColor() { return TargetLineColor; }
 
 		public override object Create(ActorInitializer init) { return new Mobile(init, this); }
 
@@ -359,14 +364,14 @@ namespace OpenRA.Mods.Common.Traits
 				self.QueueActivity(false, MoveTo(cell.Value, 0));
 		}
 
-		public CPos? GetAdjacentCell(CPos nextCell)
+		public CPos? GetAdjacentCell(CPos nextCell, Func<CPos, bool> preferToAvoid = null)
 		{
 			var availCells = new List<CPos>();
 			var notStupidCells = new List<CPos>();
 			foreach (CVec direction in CVec.Directions)
 			{
 				var p = ToCell + direction;
-				if (CanEnterCell(p) && CanStayInCell(p))
+				if (CanEnterCell(p) && CanStayInCell(p) && (preferToAvoid == null || !preferToAvoid(p)))
 					availCells.Add(p);
 				else if (p != nextCell && p != ToCell)
 					notStupidCells.Add(p);
@@ -602,19 +607,19 @@ namespace OpenRA.Mods.Common.Traits
 			return WrapMove(new Move(self, cell, WDist.FromCells(nearEnough), ignoreActor, evaluateNearestMovableCell, targetLineColor));
 		}
 
-		public Activity MoveWithinRange(Target target, WDist range,
+		public Activity MoveWithinRange(in Target target, WDist range,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null)
 		{
 			return WrapMove(new MoveWithinRange(self, target, WDist.Zero, range, initialTargetPosition, targetLineColor));
 		}
 
-		public Activity MoveWithinRange(Target target, WDist minRange, WDist maxRange,
+		public Activity MoveWithinRange(in Target target, WDist minRange, WDist maxRange,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null)
 		{
 			return WrapMove(new MoveWithinRange(self, target, minRange, maxRange, initialTargetPosition, targetLineColor));
 		}
 
-		public Activity MoveFollow(Actor self, Target target, WDist minRange, WDist maxRange,
+		public Activity MoveFollow(Actor self, in Target target, WDist minRange, WDist maxRange,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null)
 		{
 			return WrapMove(new Follow(self, target, minRange, maxRange, initialTargetPosition, targetLineColor));
@@ -657,7 +662,7 @@ namespace OpenRA.Mods.Common.Traits
 				subCell = mobile.ToSubCell;
 
 				if (recalculateSubCell)
-					subCell = mobile.Info.LocomotorInfo.SharesCell ? self.World.ActorMap.FreeSubCell(cell, subCell) : SubCell.FullCell;
+					subCell = mobile.Info.LocomotorInfo.SharesCell ? self.World.ActorMap.FreeSubCell(cell, subCell, a => a != self) : SubCell.FullCell;
 
 				// TODO: solve/reduce cell is full problem
 				if (subCell == SubCell.Invalid)
@@ -675,7 +680,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		public Activity MoveToTarget(Actor self, Target target,
+		public Activity MoveToTarget(Actor self, in Target target,
 			WPos? initialTargetPosition = null, Color? targetLineColor = null)
 		{
 			if (target.Type == TargetType.Invalid)
@@ -684,7 +689,7 @@ namespace OpenRA.Mods.Common.Traits
 			return WrapMove(new MoveAdjacentTo(self, target, initialTargetPosition, targetLineColor));
 		}
 
-		public Activity MoveIntoTarget(Actor self, Target target)
+		public Activity MoveIntoTarget(Actor self, in Target target)
 		{
 			if (target.Type == TargetType.Invalid)
 				return null;
@@ -711,7 +716,7 @@ namespace OpenRA.Mods.Common.Traits
 			return NearestMoveableCell(target, 1, 10);
 		}
 
-		public bool CanEnterTargetNow(Actor self, Target target)
+		public bool CanEnterTargetNow(Actor self, in Target target)
 		{
 			if (target.Type == TargetType.FrozenActor && !target.FrozenActor.IsValid)
 				return false;
@@ -904,7 +909,7 @@ namespace OpenRA.Mods.Common.Traits
 		}
 
 		// Note: Returns a valid order even if the unit can't move to the target
-		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		Order IIssueOrder.IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order is MoveOrderTargeter)
 				return new Order("Move", self, target, queued);
@@ -923,7 +928,7 @@ namespace OpenRA.Mods.Common.Traits
 				if (!Info.LocomotorInfo.MoveIntoShroud && !self.Owner.Shroud.IsExplored(cell))
 					return;
 
-				self.QueueActivity(order.Queued, WrapMove(new Move(self, cell, WDist.FromCells(8), null, true, Color.Green)));
+				self.QueueActivity(order.Queued, WrapMove(new Move(self, cell, WDist.FromCells(8), null, true, Info.TargetLineColor)));
 				self.ShowTargetLines();
 			}
 
@@ -968,7 +973,7 @@ namespace OpenRA.Mods.Common.Traits
 			readonly Mobile mobile;
 			readonly LocomotorInfo locomotorInfo;
 			readonly bool rejectMove;
-			public bool TargetOverridesSelection(Actor self, Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers)
+			public bool TargetOverridesSelection(Actor self, in Target target, List<Actor> actorsAt, CPos xy, TargetModifiers modifiers)
 			{
 				// Always prioritise orders over selecting other peoples actors or own actors that are already selected
 				if (target.Type == TargetType.Actor && (target.Actor.Owner != self.Owner || self.World.Selection.Contains(target.Actor)))
@@ -988,7 +993,7 @@ namespace OpenRA.Mods.Common.Traits
 			public int OrderPriority { get { return 4; } }
 			public bool IsQueued { get; protected set; }
 
-			public bool CanTarget(Actor self, Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
+			public bool CanTarget(Actor self, in Target target, List<Actor> othersAtTarget, ref TargetModifiers modifiers, ref string cursor)
 			{
 				if (rejectMove || target.Type != TargetType.Terrain || (mobile.requireForceMove && !modifiers.HasModifier(TargetModifiers.ForceMove)))
 					return false;

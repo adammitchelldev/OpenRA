@@ -37,7 +37,7 @@ namespace OpenRA.Mods.Common.Activities
 		bool hasTicked;
 		bool returnToBase;
 
-		public FlyAttack(Actor self, AttackSource source, Target target, bool forceAttack, Color? targetLineColor)
+		public FlyAttack(Actor self, AttackSource source, in Target target, bool forceAttack, Color? targetLineColor)
 		{
 			this.source = source;
 			this.target = target;
@@ -164,12 +164,12 @@ namespace OpenRA.Mods.Common.Activities
 
 			// The aircraft must keep moving forward even if it is already in an ideal position.
 			else if (attackAircraft.Info.AttackType == AirAttackType.Strafe)
-				QueueChild(new StrafeAttackRun(self, attackAircraft, target, strafeDistance != WDist.Zero ? strafeDistance : lastVisibleMaximumRange));
+				QueueChild(new StrafeAttackRun(self, attackAircraft, aircraft, target, strafeDistance != WDist.Zero ? strafeDistance : lastVisibleMaximumRange));
 			else if (attackAircraft.Info.AttackType == AirAttackType.Default && !aircraft.Info.CanHover)
 				QueueChild(new FlyAttackRun(self, target, lastVisibleMaximumRange));
 
 			// Turn to face the target if required.
-			else if (!attackAircraft.TargetInFiringArc(self, target, 4 * attackAircraft.Info.FacingTolerance))
+			else if (!attackAircraft.TargetInFiringArc(self, target, attackAircraft.Info.FacingTolerance))
 				aircraft.Facing = Util.TickFacing(aircraft.Facing, desiredFacing, aircraft.TurnSpeed);
 
 			return false;
@@ -207,11 +207,12 @@ namespace OpenRA.Mods.Common.Activities
 
 	class FlyAttackRun : Activity
 	{
+		readonly WDist exitRange;
+
 		Target target;
-		WDist exitRange;
 		bool targetIsVisibleActor;
 
-		public FlyAttackRun(Actor self, Target t, WDist exitRange)
+		public FlyAttackRun(Actor self, in Target t, WDist exitRange)
 		{
 			ChildHasPriority = false;
 
@@ -225,6 +226,9 @@ namespace OpenRA.Mods.Common.Activities
 			if (target.IsValidFor(self))
 			{
 				QueueChild(new Fly(self, target, target.CenterPosition));
+
+				// Fly a single tick forward so we have passed the target and start flying out of range facing away from it
+				QueueChild(new FlyForward(self, 1));
 				QueueChild(new Fly(self, target, exitRange, WDist.MaxValue, target.CenterPosition));
 			}
 			else
@@ -250,16 +254,19 @@ namespace OpenRA.Mods.Common.Activities
 
 	class StrafeAttackRun : Activity
 	{
-		Target target;
-		WDist exitRange;
 		readonly AttackAircraft attackAircraft;
+		readonly Aircraft aircraft;
+		readonly WDist exitRange;
 
-		public StrafeAttackRun(Actor self, AttackAircraft attackAircraft, Target t, WDist exitRange)
+		Target target;
+
+		public StrafeAttackRun(Actor self, AttackAircraft attackAircraft, Aircraft aircraft, in Target t, WDist exitRange)
 		{
 			ChildHasPriority = false;
 
 			target = t;
 			this.attackAircraft = attackAircraft;
+			this.aircraft = aircraft;
 			this.exitRange = exitRange;
 		}
 
@@ -269,7 +276,11 @@ namespace OpenRA.Mods.Common.Activities
 			if (target.IsValidFor(self))
 			{
 				QueueChild(new Fly(self, target, target.CenterPosition));
-				QueueChild(new Fly(self, target, exitRange, WDist.MaxValue, target.CenterPosition));
+				QueueChild(new FlyForward(self, exitRange));
+
+				// Exit the range and then fly enough to turn towards the target for another run
+				var distanceToTurn = new WDist(aircraft.Info.Speed * 256 / aircraft.Info.TurnSpeed.Angle);
+				QueueChild(new Fly(self, target, exitRange + distanceToTurn, WDist.MaxValue, target.CenterPosition));
 			}
 			else
 				Cancel(self);

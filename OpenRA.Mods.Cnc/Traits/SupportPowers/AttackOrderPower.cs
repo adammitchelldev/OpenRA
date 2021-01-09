@@ -50,7 +50,6 @@ namespace OpenRA.Mods.Cnc.Traits
 
 		public override void SelectTarget(Actor self, string order, SupportPowerManager manager)
 		{
-			Game.Sound.PlayToPlayer(SoundType.UI, manager.Self.Owner, Info.SelectTargetSound);
 			self.World.OrderGenerator = new SelectAttackPowerTarget(self, order, manager, info.Cursor, MouseButton.Left, attack);
 		}
 
@@ -69,7 +68,7 @@ namespace OpenRA.Mods.Cnc.Traits
 			base.Created(self);
 		}
 
-		void INotifyBurstComplete.FiredBurst(Actor self, Target target, Armament a)
+		void INotifyBurstComplete.FiredBurst(Actor self, in Target target, Armament a)
 		{
 			self.World.IssueOrder(new Order("Stop", self, false));
 		}

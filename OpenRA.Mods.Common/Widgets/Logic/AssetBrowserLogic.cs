@@ -43,10 +43,12 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 		string currentFilename;
 		IReadOnlyPackage currentPackage;
 		Sprite[] currentSprites;
+		IModel currentVoxel;
 		VqaPlayerWidget player = null;
 		bool isVideoLoaded = false;
 		bool isLoadError = false;
 		int currentFrame;
+		WRot modelOrientation;
 
 		[ObjectCreator.UseCtor]
 		public AssetBrowserLogic(Widget widget, Action onExit, ModData modData, World world, Dictionary<string, MiniYaml> logicArgs)
@@ -69,14 +71,8 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 			if (sourceDropdown != null)
 			{
 				sourceDropdown.OnMouseDown = _ => ShowSourceDropdown(sourceDropdown);
-				sourceDropdown.GetText = () =>
-				{
-					var name = assetSource != null ? Platform.UnresolvePath(assetSource.Name) : "All Packages";
-					if (name.Length > 15)
-						name = "..." + name.Substring(name.Length - 15);
-
-					return name;
-				};
+				var sourceName = new CachedTransform<IReadOnlyPackage, string>(GetSourceDisplayName);
+				sourceDropdown.GetText = () => sourceName.Update(assetSource);
 			}
 
 			var spriteWidget = panel.GetOrNull<SpriteWidget>("SPRITE");
@@ -85,12 +81,23 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 				spriteWidget.GetSprite = () => currentSprites != null ? currentSprites[currentFrame] : null;
 				currentPalette = spriteWidget.Palette;
 				spriteWidget.GetPalette = () => currentPalette;
-				spriteWidget.IsVisible = () => !isVideoLoaded && !isLoadError;
+				spriteWidget.IsVisible = () => !isVideoLoaded && !isLoadError && currentSprites != null;
 			}
 
 			var playerWidget = panel.GetOrNull<VqaPlayerWidget>("PLAYER");
 			if (playerWidget != null)
 				playerWidget.IsVisible = () => isVideoLoaded && !isLoadError;
+
+			var modelWidget = panel.GetOrNull<ModelWidget>("VOXEL");
+			if (modelWidget != null)
+			{
+				modelWidget.GetVoxel = () => currentVoxel;
+				currentPalette = modelWidget.Palette;
+				modelWidget.GetPalette = () => currentPalette;
+				modelWidget.GetPlayerPalette = () => currentPalette;
+				modelWidget.GetRotation = () => modelOrientation;
+				modelWidget.IsVisible = () => !isVideoLoaded && !isLoadError && currentVoxel != null;
+			}
 
 			var errorLabelWidget = panel.GetOrNull("ERROR");
 			if (errorLabelWidget != null)
@@ -214,6 +221,46 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 				};
 
 				prevButton.IsVisible = () => !isVideoLoaded;
+			}
+
+			var voxelContainer = panel.GetOrNull("VOXEL_SELECTOR");
+			if (voxelContainer != null)
+				voxelContainer.IsVisible = () => currentVoxel != null;
+
+			var rollSlider = panel.GetOrNull<SliderWidget>("ROLL_SLIDER");
+			if (rollSlider != null)
+			{
+				rollSlider.OnChange += x =>
+				{
+					var roll = (int)x;
+					modelOrientation = modelOrientation.WithRoll(new WAngle(roll));
+				};
+
+				rollSlider.GetValue = () => modelOrientation.Roll.Angle;
+			}
+
+			var pitchSlider = panel.GetOrNull<SliderWidget>("PITCH_SLIDER");
+			if (pitchSlider != null)
+			{
+				pitchSlider.OnChange += x =>
+				{
+					var pitch = (int)x;
+					modelOrientation = modelOrientation.WithPitch(new WAngle(pitch));
+				};
+
+				pitchSlider.GetValue = () => modelOrientation.Pitch.Angle;
+			}
+
+			var yawSlider = panel.GetOrNull<SliderWidget>("YAW_SLIDER");
+			if (yawSlider != null)
+			{
+				yawSlider.OnChange += x =>
+				{
+					var yaw = (int)x;
+					modelOrientation = modelOrientation.WithYaw(new WAngle(yaw));
+				};
+
+				yawSlider.GetValue = () => modelOrientation.Yaw.Angle;
 			}
 
 			var assetBrowserModData = modData.Manifest.Get<AssetBrowser>();
@@ -348,12 +395,24 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 					return true;
 				}
 
-				currentSprites = world.Map.Rules.Sequences.SpriteCache[prefix + filename];
-				currentFrame = 0;
-				if (frameSlider != null)
+				if (Path.GetExtension(filename.ToLowerInvariant()) == ".vxl")
 				{
-					frameSlider.MaximumValue = (float)currentSprites.Length - 1;
-					frameSlider.Ticks = currentSprites.Length;
+					var voxelName = Path.GetFileNameWithoutExtension(filename);
+					currentVoxel = world.ModelCache.GetModel(voxelName);
+					currentSprites = null;
+				}
+				else
+				{
+					currentSprites = world.Map.Rules.Sequences.SpriteCache[prefix + filename];
+					currentFrame = 0;
+
+					if (frameSlider != null)
+					{
+						frameSlider.MaximumValue = (float)currentSprites.Length - 1;
+						frameSlider.Ticks = currentSprites.Length;
+					}
+
+					currentVoxel = null;
 				}
 			}
 			catch (Exception ex)
@@ -370,12 +429,14 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 
 		bool ShowSourceDropdown(DropDownButtonWidget dropdown)
 		{
+			var sourceName = new CachedTransform<IReadOnlyPackage, string>(GetSourceDisplayName);
 			Func<IReadOnlyPackage, ScrollItemWidget, ScrollItemWidget> setupItem = (source, itemTemplate) =>
 			{
 				var item = ScrollItemWidget.Setup(itemTemplate,
 					() => assetSource == source,
 					() => { assetSource = source; PopulateAssetList(); });
-				item.Get<LabelWidget>("LABEL").GetText = () => source != null ? Platform.UnresolvePath(source.Name) : "All Packages";
+
+				item.Get<LabelWidget>("LABEL").GetText = () => sourceName.Update(source);
 				return item;
 			};
 
@@ -433,6 +494,34 @@ namespace OpenRA.Mods.Common.Widgets.Logic
 				.SelectMany(p => p.PaletteNames);
 			dropdown.ShowDropDown("LABEL_DROPDOWN_TEMPLATE", 280, palettes, setupItem);
 			return true;
+		}
+
+		string GetSourceDisplayName(IReadOnlyPackage source)
+		{
+			if (source == null)
+				return "All Packages";
+
+			// Packages that are explicitly mounted in the filesystem use their explicit mount name
+			var fs = (OpenRA.FileSystem.FileSystem)modData.DefaultFileSystem;
+			var name = fs.GetPrefix(source);
+
+			// Fall back to the path relative to the mod, engine, or support dir
+			if (name == null)
+			{
+				name = source.Name;
+				var compare = Platform.CurrentPlatform == PlatformType.Windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+				if (name.StartsWith(modData.Manifest.Package.Name, compare))
+					name = "$" + modData.Manifest.Id + "/" + name.Substring(modData.Manifest.Package.Name.Length + 1);
+				else if (name.StartsWith(Platform.EngineDir, compare))
+					name = "./" + name.Substring(Platform.EngineDir.Length);
+				else if (name.StartsWith(Platform.SupportDir, compare))
+					name = "^" + name.Substring(Platform.SupportDir.Length);
+			}
+
+			if (name.Length > 18)
+				name = "..." + name.Substring(name.Length - 15);
+
+			return name;
 		}
 	}
 }

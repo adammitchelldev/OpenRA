@@ -39,8 +39,8 @@ namespace OpenRA.Mods.Common.Traits
 		[Desc("Sound to instantly play at the targeted area.")]
 		public readonly string OnFireSound = null;
 
-		[Desc("Player stances which condition can be applied to.")]
-		public readonly Stance ValidStances = Stance.Ally;
+		[Desc("Player relationships which condition can be applied to.")]
+		public readonly PlayerRelationship ValidRelationships = PlayerRelationship.Ally;
 
 		[SequenceReference]
 		[Desc("Sequence to play for granting actor when activated.",
@@ -67,7 +67,6 @@ namespace OpenRA.Mods.Common.Traits
 
 		public override void SelectTarget(Actor self, string order, SupportPowerManager manager)
 		{
-			Game.Sound.PlayToPlayer(SoundType.World, manager.Self.Owner, Info.SelectTargetSound);
 			self.World.OrderGenerator = new SelectConditionTarget(Self.World, order, manager, this);
 		}
 
@@ -97,7 +96,7 @@ namespace OpenRA.Mods.Common.Traits
 
 			return units.Distinct().Where(a =>
 			{
-				if (!info.ValidStances.HasStance(a.Owner.Stances[Self.Owner]))
+				if (!info.ValidRelationships.HasStance(Self.Owner.RelationshipWith(a.Owner)))
 					return false;
 
 				return a.TraitsImplementing<ExternalCondition>()
@@ -162,7 +161,7 @@ namespace OpenRA.Mods.Common.Traits
 				var pal = wr.Palette(TileSet.TerrainPaletteInternalName);
 
 				foreach (var t in power.CellsMatching(xy, footprint, dimensions))
-					yield return new SpriteRenderable(tile, wr.World.Map.CenterOfCell(t), WVec.Zero, -511, pal, 1f, true, true);
+					yield return new SpriteRenderable(tile, wr.World.Map.CenterOfCell(t), WVec.Zero, -511, pal, 1f, true, TintModifiers.IgnoreWorldTint);
 			}
 
 			protected override string GetCursor(World world, CPos cell, int2 worldPixel, MouseInput mi)

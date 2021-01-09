@@ -108,9 +108,9 @@ namespace OpenRA.Mods.Common.Traits
 
 		public void Uncloak(int time) { remainingTime = Math.Max(remainingTime, time); }
 
-		void INotifyAttack.Attacking(Actor self, Target target, Armament a, Barrel barrel) { if (Info.UncloakOn.HasFlag(UncloakType.Attack)) Uncloak(); }
+		void INotifyAttack.Attacking(Actor self, in Target target, Armament a, Barrel barrel) { if (Info.UncloakOn.HasFlag(UncloakType.Attack)) Uncloak(); }
 
-		void INotifyAttack.PreparingAttack(Actor self, Target target, Armament a, Barrel barrel) { }
+		void INotifyAttack.PreparingAttack(Actor self, in Target target, Armament a, Barrel barrel) { }
 
 		void INotifyDamage.Damaged(Actor self, AttackInfo e)
 		{
@@ -135,7 +135,7 @@ namespace OpenRA.Mods.Common.Traits
 				if (palette == null)
 					return r;
 				else
-					return r.Select(a => a.IsDecoration ? a : a.WithPalette(palette));
+					return r.Select(a => !a.IsDecoration && a is IPalettedRenderable ? ((IPalettedRenderable)a).WithPalette(palette) : a);
 			}
 			else
 				return SpriteRenderable.None;

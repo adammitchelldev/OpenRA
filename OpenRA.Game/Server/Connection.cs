@@ -122,10 +122,10 @@ namespace OpenRA.Server
 				}
 		}
 
-		public void SendData(byte[] data)
+		public void SendData(byte[] data, Server server)
 		{
 			BufferData(data);
-			Flush();
+			Flush(server);
 		}
 
 		public void BufferData(byte[] data)
@@ -133,11 +133,26 @@ namespace OpenRA.Server
 			SendBuffer.AddRange(data);
 		}
 
-		public void Flush()
+		public void Flush(Server server)
 		{
+			if (SendBuffer.Count == 0)
+				return;
+
 			var data = SendBuffer.ToArray();
 			SendBuffer.Clear();
 
+			try {
+				InnerSend(data);
+			}
+			catch (Exception e)
+			{
+				server.DropClient(this);
+				Log.Write("server", "Dropping client {0} because dispatching orders failed: {1}", PlayerIndex, e);
+			}
+		}
+
+		private void InnerSend(byte[] data)
+		{
 			var start = 0;
 			var length = data.Length;
 

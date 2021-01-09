@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net472</TargetFramework>
+    <OutputType>Library</OutputType>
+    <TargetFramework>netstandard2.1</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Optimize>true</Optimize>
     <UseVSHostingProcess>false</UseVSHostingProcess>
@@ -10,7 +10,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
     <RootNamespace>OpenRA</RootNamespace>
-    <OutputPath>..</OutputPath>
+    <OutputPath>../bin</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <PlatformTarget>AnyCPU</PlatformTarget>
     <ExternalConsole>false</ExternalConsole>
@@ -31,34 +31,18 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <Optimize>false</Optimize>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(TargetPlatform)' == 'win-x86'">
-    <Prefer32bit>true</Prefer32bit>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(RunConfiguration)' == 'Red Alert'">
-    <StartAction>Project</StartAction>
-    <StartArguments>Game.Mod=ra</StartArguments>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(RunConfiguration)' == 'Dune 2000'">
-    <StartAction>Project</StartAction>
-    <StartArguments>Game.Mod=d2k</StartArguments>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(RunConfiguration)' == 'Tiberian Dawn'">
-    <StartAction>Project</StartAction>
-    <StartArguments>Game.Mod=cnc</StartArguments>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(RunConfiguration)' == 'Tiberian Sun'">
-    <StartAction>Project</StartAction>
-    <StartArguments>Game.Mod=ts</StartArguments>
-  </PropertyGroup>
   <ItemGroup>
-    <None Include="App.config" />
     <PackageReference Include="OpenRA-Eluant" Version="1.0.17" />
     <PackageReference Include="OpenRA-Open.NAT" Version="1.0.0" />
-    <PackageReference Include="SharpZipLib" Version="1.2.0" />
+    <PackageReference Include="SharpZipLib" Version="1.3.1" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.118" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0" PrivateAssets="All" />
     <AdditionalFiles Include="../stylecop.json" />
-    <AdditionalFiles Include="Properties/launchSettings.json" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(Mono)' == ''">
+    <PackageReference Include="Microsoft.DotNet.PlatformAbstractions" Version="3.1.6" />
+    <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="5.0.0-preview.3-runtime.20214.6" />
+    <PackageReference Include="System.Runtime.Loader" Version="4.3.0" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Network\Abstractions\" />

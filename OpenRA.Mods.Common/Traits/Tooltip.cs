@@ -15,7 +15,6 @@ namespace OpenRA.Mods.Common.Traits
 {
 	public abstract class TooltipInfoBase : ConditionalTraitInfo, Requires<IMouseBoundsInfo>
 	{
-		[Translate]
 		public readonly string Name = "";
 	}
 
@@ -28,7 +27,6 @@ namespace OpenRA.Mods.Common.Traits
 	[Desc("Shown in the build palette widget.")]
 	public class TooltipInfo : TooltipInfoBase, ITooltipInfo
 	{
-		[Translate]
 		[Desc("An optional generic name (i.e. \"Soldier\" or \"Structure\")" +
 			"to be shown to chosen players.")]
 		public readonly string GenericName = null;
@@ -36,38 +34,35 @@ namespace OpenRA.Mods.Common.Traits
 		[Desc("Prefix generic tooltip name with 'Ally/Neutral/EnemyPrefix'.")]
 		public readonly bool GenericStancePrefix = true;
 
-		[Translate]
 		[Desc("Prefix to display in the tooltip for allied units.")]
 		public readonly string AllyPrefix = "Allied";
 
-		[Translate]
 		[Desc("Prefix to display in the tooltip for neutral units.")]
 		public readonly string NeutralPrefix = null;
 
-		[Translate]
 		[Desc("Prefix to display in the tooltip for enemy units.")]
 		public readonly string EnemyPrefix = "Enemy";
 
 		[Desc("Player stances that the generic name should be shown to.")]
-		public readonly Stance GenericVisibility = Stance.None;
+		public readonly PlayerRelationship GenericVisibility = PlayerRelationship.None;
 
 		[Desc("Show the actor's owner and their faction flag")]
 		public readonly bool ShowOwnerRow = true;
 
 		public override object Create(ActorInitializer init) { return new Tooltip(init.Self, this); }
 
-		public string TooltipForPlayerStance(Stance stance)
+		public string TooltipForPlayerStance(PlayerRelationship stance)
 		{
-			if (stance == Stance.None || !GenericVisibility.HasStance(stance))
+			if (stance == PlayerRelationship.None || !GenericVisibility.HasStance(stance))
 				return Name;
 
-			if (GenericStancePrefix && !string.IsNullOrEmpty(AllyPrefix) && stance == Stance.Ally)
+			if (GenericStancePrefix && !string.IsNullOrEmpty(AllyPrefix) && stance == PlayerRelationship.Ally)
 				return AllyPrefix + " " + GenericName;
 
-			if (GenericStancePrefix && !string.IsNullOrEmpty(NeutralPrefix) && stance == Stance.Neutral)
+			if (GenericStancePrefix && !string.IsNullOrEmpty(NeutralPrefix) && stance == PlayerRelationship.Neutral)
 				return NeutralPrefix + " " + GenericName;
 
-			if (GenericStancePrefix && !string.IsNullOrEmpty(EnemyPrefix) && stance == Stance.Enemy)
+			if (GenericStancePrefix && !string.IsNullOrEmpty(EnemyPrefix) && stance == PlayerRelationship.Enemy)
 				return EnemyPrefix + " " + GenericName;
 
 			return GenericName;

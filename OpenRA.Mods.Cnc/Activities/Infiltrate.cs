@@ -24,14 +24,14 @@ namespace OpenRA.Mods.Cnc.Activities
 		readonly INotifyInfiltration[] notifiers;
 		Actor enterActor;
 
-		public Infiltrate(Actor self, Target target, Infiltrates infiltrates)
-			: base(self, target, Color.Crimson)
+		public Infiltrate(Actor self, in Target target, Infiltrates infiltrates, Color? targetLineColor)
+			: base(self, target, targetLineColor)
 		{
 			this.infiltrates = infiltrates;
 			notifiers = self.TraitsImplementing<INotifyInfiltration>().ToArray();
 		}
 
-		protected override void TickInner(Actor self, Target target, bool targetIsDeadOrHiddenActor)
+		protected override void TickInner(Actor self, in Target target, bool targetIsDeadOrHiddenActor)
 		{
 			if (infiltrates.IsTraitDisabled)
 				Cancel(self, true);

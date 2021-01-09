@@ -46,7 +46,7 @@ namespace OpenRA.Mods.Common.Traits
 		bool opportunityForceAttack;
 		bool opportunityTargetIsPersistentTarget;
 
-		public void SetRequestedTarget(Actor self, Target target, bool isForceAttack = false)
+		public void SetRequestedTarget(Actor self, in Target target, bool isForceAttack = false)
 		{
 			RequestedTarget = target;
 			requestedForceAttack = isForceAttack;
@@ -79,7 +79,7 @@ namespace OpenRA.Mods.Common.Traits
 			base.Created(self);
 		}
 
-		protected bool CanAimAtTarget(Actor self, Target target, bool forceAttack)
+		protected bool CanAimAtTarget(Actor self, in Target target, bool forceAttack)
 		{
 			if (target.Type == TargetType.Actor && !target.Actor.CanBeViewedByPlayer(self.Owner))
 				return false;
@@ -91,7 +91,7 @@ namespace OpenRA.Mods.Common.Traits
 			var armaments = ChooseArmamentsForTarget(target, forceAttack);
 			foreach (var a in armaments)
 				if (target.IsInRange(pos, a.MaxRange()) && (a.Weapon.MinRange == WDist.Zero || !target.IsInRange(pos, a.Weapon.MinRange)))
-					if (TargetInFiringArc(self, target, 4 * Info.FacingTolerance))
+					if (TargetInFiringArc(self, target, Info.FacingTolerance))
 						return true;
 
 			return false;
@@ -154,12 +154,12 @@ namespace OpenRA.Mods.Common.Traits
 			base.Tick(self);
 		}
 
-		public override Activity GetAttackActivity(Actor self, AttackSource source, Target newTarget, bool allowMove, bool forceAttack, Color? targetLineColor = null)
+		public override Activity GetAttackActivity(Actor self, AttackSource source, in Target newTarget, bool allowMove, bool forceAttack, Color? targetLineColor = null)
 		{
 			return new AttackActivity(self, newTarget, allowMove, forceAttack, targetLineColor);
 		}
 
-		public override void OnResolveAttackOrder(Actor self, Activity activity, Target target, bool queued, bool forceAttack)
+		public override void OnResolveAttackOrder(Actor self, Activity activity, in Target target, bool queued, bool forceAttack)
 		{
 			// We can improve responsiveness for turreted actors by preempting
 			// the last order (usually a move) and setting the target immediately
@@ -228,7 +228,7 @@ namespace OpenRA.Mods.Common.Traits
 			bool wasMovingWithinRange;
 			bool hasTicked;
 
-			public AttackActivity(Actor self, Target target, bool allowMove, bool forceAttack, Color? targetLineColor = null)
+			public AttackActivity(Actor self, in Target target, bool allowMove, bool forceAttack, Color? targetLineColor = null)
 			{
 				attack = self.Trait<AttackFollow>();
 				move = allowMove ? self.TraitOrDefault<IMove>() : null;

@@ -31,6 +31,9 @@ namespace OpenRA.Mods.Common.Traits
 		[VoiceReference]
 		public readonly string Voice = "Action";
 
+		[Desc("Color to use for the target line while in tunnels.")]
+		public readonly Color TargetLineColor = Color.Green;
+
 		[ConsumedConditionReference]
 		[Desc("Boolean expression defining the condition under which the regular (non-force) enter cursor is disabled.")]
 		public readonly BooleanExpression RequireForceMoveCondition = null;
@@ -42,12 +45,14 @@ namespace OpenRA.Mods.Common.Traits
 	{
 		readonly EntersTunnelsInfo info;
 		readonly IMove move;
+		readonly IMoveInfo moveInfo;
 		bool requireForceMove;
 
 		public EntersTunnels(Actor self, EntersTunnelsInfo info)
 		{
 			this.info = info;
 			move = self.Trait<IMove>();
+			moveInfo = self.Info.TraitInfo<IMoveInfo>();
 		}
 
 		public IEnumerable<IOrderTargeter> Orders
@@ -63,7 +68,7 @@ namespace OpenRA.Mods.Common.Traits
 			return !requireForceMove || modifiers.HasModifier(TargetModifiers.ForceMove);
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID != "EnterTunnel")
 				return null;
@@ -85,8 +90,8 @@ namespace OpenRA.Mods.Common.Traits
 			if (tunnel == null || !tunnel.Exit.HasValue)
 				return;
 
-			self.QueueActivity(order.Queued, move.MoveTo(tunnel.Entrance, tunnel.NearEnough, targetLineColor: Color.Green));
-			self.QueueActivity(move.MoveTo(tunnel.Exit.Value, tunnel.NearEnough, targetLineColor: Color.Green));
+			self.QueueActivity(order.Queued, move.MoveTo(tunnel.Entrance, tunnel.NearEnough, targetLineColor: moveInfo.GetTargetLineColor()));
+			self.QueueActivity(move.MoveTo(tunnel.Exit.Value, tunnel.NearEnough, targetLineColor: info.TargetLineColor));
 			self.ShowTargetLines();
 		}
 

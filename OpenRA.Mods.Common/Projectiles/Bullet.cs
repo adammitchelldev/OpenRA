@@ -93,8 +93,11 @@ namespace OpenRA.Mods.Common.Projectiles
 		[Desc("Sound to play when the projectile hits the ground, but not the target.")]
 		public readonly string BounceSound = null;
 
-		[Desc("If projectile touches an actor with one of these stances during or after the first bounce, trigger explosion.")]
-		public readonly Stance ValidBounceBlockerStances = Stance.Enemy | Stance.Neutral;
+		[Desc("Terrain where the projectile explodes instead of bouncing.")]
+		public readonly HashSet<string> InvalidBounceTerrain = new HashSet<string>();
+
+		[Desc("Trigger the explosion if the projectile touches an actor thats owner has these player relationships.")]
+		public readonly PlayerRelationship ValidBounceBlockerRelationships = PlayerRelationship.Enemy | PlayerRelationship.Neutral;
 
 		[Desc("Altitude above terrain below which to explode. Zero effectively deactivates airburst.")]
 		public readonly WDist AirburstAltitude = WDist.Zero;
@@ -202,12 +205,17 @@ namespace OpenRA.Mods.Common.Projectiles
 			lastPos = pos;
 			pos = WPos.LerpQuadratic(source, target, angle, ticks, length);
 
+			if (ShouldExplode(world))
+				Explode(world);
+		}
+
+		bool ShouldExplode(World world)
+		{
 			// Check for walls or other blocking obstacles
-			var shouldExplode = false;
 			if (info.Blockable && BlocksProjectiles.AnyBlockingActorsBetween(world, lastPos, pos, info.Width, out var blockedPos))
 			{
 				pos = blockedPos;
-				shouldExplode = true;
+				return true;
 			}
 
 			if (!string.IsNullOrEmpty(info.TrailImage) && --smokeTicks < 0)
@@ -227,11 +235,21 @@ namespace OpenRA.Mods.Common.Projectiles
 
 			if (flightLengthReached && shouldBounce)
 			{
-				shouldExplode |= AnyValidTargetsInRadius(world, pos, info.Width, args.SourceActor, true);
+				var cell = world.Map.CellContaining(pos);
+				if (!world.Map.Contains(cell))
+					return true;
+
+				if (info.InvalidBounceTerrain.Contains(world.Map.GetTerrainInfo(cell).Type))
+					return true;
+
+				if (AnyValidTargetsInRadius(world, pos, info.Width, args.SourceActor, true))
+					return true;
+
 				target += (pos - source) * info.BounceRangeModifier / 100;
 				var dat = world.Map.DistanceAboveTerrain(target);
 				target += new WVec(0, 0, -dat.Length);
 				length = Math.Max((target - pos).Length / speed.Length, 1);
+
 				ticks = 0;
 				source = pos;
 				Game.Sound.Play(SoundType.World, info.BounceSound, source);
@@ -239,17 +257,18 @@ namespace OpenRA.Mods.Common.Projectiles
 			}
 
 			// Flight length reached / exceeded
-			shouldExplode |= flightLengthReached && !shouldBounce;
+			if (flightLengthReached && !shouldBounce)
+				return true;
 
 			// Driving into cell with higher height level
-			shouldExplode |= world.Map.DistanceAboveTerrain(pos).Length < 0;
+			if (world.Map.DistanceAboveTerrain(pos).Length < 0)
+				return true;
 
 			// After first bounce, check for targets each tick
-			if (remainingBounces < info.BounceCount)
-				shouldExplode |= AnyValidTargetsInRadius(world, pos, info.Width, args.SourceActor, true);
+			if (remainingBounces < info.BounceCount && AnyValidTargetsInRadius(world, pos, info.Width, args.SourceActor, true))
+				return true;
 
-			if (shouldExplode)
-				Explode(world);
+			return false;
 		}
 
 		public IEnumerable<IRenderable> Render(WorldRenderer wr)
@@ -300,7 +319,7 @@ namespace OpenRA.Mods.Common.Projectiles
 				if (checkTargetType && !Target.FromActor(victim).IsValidFor(firedBy))
 					continue;
 
-				if (!info.ValidBounceBlockerStances.HasStance(victim.Owner.Stances[firedBy.Owner]))
+				if (!info.ValidBounceBlockerRelationships.HasStance(firedBy.Owner.RelationshipWith(victim.Owner)))
 					continue;
 
 				// If the impact position is within any actor's HitShape, we have a direct hit

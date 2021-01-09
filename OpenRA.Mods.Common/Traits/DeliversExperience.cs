@@ -12,6 +12,7 @@
 using System.Collections.Generic;
 using OpenRA.Mods.Common.Activities;
 using OpenRA.Mods.Common.Orders;
+using OpenRA.Primitives;
 using OpenRA.Traits;
 
 namespace OpenRA.Mods.Common.Traits
@@ -30,6 +31,9 @@ namespace OpenRA.Mods.Common.Traits
 
 		[VoiceReference]
 		public readonly string Voice = "Action";
+
+		[Desc("Color to use for the target line.")]
+		public readonly Color TargetLineColor = Color.Yellow;
 
 		public override object Create(ActorInitializer init) { return new DeliversExperience(init, this); }
 	}
@@ -56,7 +60,7 @@ namespace OpenRA.Mods.Common.Traits
 			}
 		}
 
-		public Order IssueOrder(Actor self, IOrderTargeter order, Target target, bool queued)
+		public Order IssueOrder(Actor self, IOrderTargeter order, in Target target, bool queued)
 		{
 			if (order.OrderID != "DeliverExperience")
 				return null;
@@ -86,7 +90,7 @@ namespace OpenRA.Mods.Common.Traits
 			else if (order.Target.Type != TargetType.FrozenActor)
 				return;
 
-			self.QueueActivity(order.Queued, new DonateExperience(self, order.Target, gainsExperience.Level, info.PlayerExperience));
+			self.QueueActivity(order.Queued, new DonateExperience(self, order.Target, gainsExperience.Level, info.PlayerExperience, info.TargetLineColor));
 			self.ShowTargetLines();
 		}
 
@@ -100,19 +104,19 @@ namespace OpenRA.Mods.Common.Traits
 				if (target == self)
 					return false;
 
-				var type = self.Info.TraitInfo<DeliversExperienceInfo>().Type;
-				var targetInfo = target.Info.TraitInfoOrDefault<AcceptsDeliveredExperienceInfo>();
 				var targetGainsExperience = target.TraitOrDefault<GainsExperience>();
-
-				if (targetGainsExperience == null || targetInfo == null)
+				if (targetGainsExperience == null || targetGainsExperience.Level == targetGainsExperience.MaxLevel)
 					return false;
 
-				if (targetGainsExperience.Level == targetGainsExperience.MaxLevel)
+				var targetInfo = target.Info.TraitInfoOrDefault<AcceptsDeliveredExperienceInfo>();
+				if (targetInfo == null || !targetInfo.ValidRelationships.HasStance(target.Owner.RelationshipWith(self.Owner)))
 					return false;
 
-				return targetInfo.ValidStances.HasStance(target.Owner.Stances[self.Owner])
-					&& (targetInfo.ValidTypes.Count == 0
-						|| (!string.IsNullOrEmpty(type) && targetInfo.ValidTypes.Contains(type)));
+				if (targetInfo.ValidTypes.Count == 0)
+					return true;
+
+				var type = self.Info.TraitInfo<DeliversExperienceInfo>().Type;
+				return !string.IsNullOrEmpty(type) && targetInfo.ValidTypes.Contains(type);
 			}
 
 			public override bool CanTargetFrozenActor(Actor self, FrozenActor target, TargetModifiers modifiers, ref string cursor)
@@ -120,19 +124,19 @@ namespace OpenRA.Mods.Common.Traits
 				if (target.Actor == null || target.Actor == self)
 					return false;
 
-				var type = self.Info.TraitInfo<DeliversExperienceInfo>().Type;
-				var targetInfo = target.Info.TraitInfoOrDefault<AcceptsDeliveredExperienceInfo>();
 				var targetGainsExperience = target.Actor.TraitOrDefault<GainsExperience>();
-
-				if (targetGainsExperience == null || targetInfo == null)
+				if (targetGainsExperience == null || targetGainsExperience.Level == targetGainsExperience.MaxLevel)
 					return false;
 
-				if (targetGainsExperience.Level == targetGainsExperience.MaxLevel)
+				var targetInfo = target.Info.TraitInfoOrDefault<AcceptsDeliveredExperienceInfo>();
+				if (targetInfo == null || !targetInfo.ValidRelationships.HasStance(target.Owner.RelationshipWith(self.Owner)))
 					return false;
 
-				return targetInfo.ValidStances.HasStance(target.Owner.Stances[self.Owner])
-					&& (targetInfo.ValidTypes.Count == 0
-						|| (!string.IsNullOrEmpty(type) && targetInfo.ValidTypes.Contains(type)));
+				if (targetInfo.ValidTypes.Count == 0)
+					return true;
+
+				var type = self.Info.TraitInfo<DeliversExperienceInfo>().Type;
+				return !string.IsNullOrEmpty(type) && targetInfo.ValidTypes.Contains(type);
 			}
 		}
 	}

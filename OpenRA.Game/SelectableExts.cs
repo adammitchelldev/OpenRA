@@ -36,11 +36,11 @@ namespace OpenRA.Traits
 			if (a.Owner == viewer || viewer == null)
 				return basePriority;
 
-			switch (viewer.Stances[a.Owner])
+			switch (viewer.RelationshipWith(a.Owner))
 			{
-				case Stance.Ally: return basePriority - PriorityRange;
-				case Stance.Neutral: return basePriority - 2 * PriorityRange;
-				case Stance.Enemy: return basePriority - 3 * PriorityRange;
+				case PlayerRelationship.Ally: return basePriority - PriorityRange;
+				case PlayerRelationship.Neutral: return basePriority - 2 * PriorityRange;
+				case PlayerRelationship.Enemy: return basePriority - 3 * PriorityRange;
 
 				default:
 					throw new InvalidOperationException();
