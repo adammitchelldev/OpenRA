@@ -141,7 +141,8 @@ namespace OpenRA.Server
 			var data = SendBuffer.ToArray();
 			SendBuffer.Clear();
 
-			try {
+			try
+			{
 				InnerSend(data);
 			}
 			catch (Exception e)
