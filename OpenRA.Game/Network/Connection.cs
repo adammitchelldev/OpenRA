@@ -216,6 +216,8 @@ namespace OpenRA.Network
 
 		public override string ErrorMessage { get { return errorMessage; } }
 
+		public bool UseNewNetcode;
+
 		public NetworkConnection(ConnectionTarget target)
 		{
 			this.target = target;
@@ -318,7 +320,7 @@ namespace OpenRA.Network
 					var client = reader.ReadInt32();
 					var buf = reader.ReadBytes(len);
 
-					if (client == LocalClientId && len == 7 && buf[4] == (byte)OrderType.Ack)
+					if (UseNewNetcode && client == LocalClientId && len == 7 && buf[4] == (byte)OrderType.Ack)
 					{
 						Ack(buf);
 					}
@@ -425,7 +427,8 @@ namespace OpenRA.Network
 						ackArray = ackMs.GetBuffer();
 					}
 
-					awaitingAckPackets.Enqueue(ackArray); // TODO fix having to write byte buffer twice
+					if (UseNewNetcode)
+						awaitingAckPackets.Enqueue(ackArray); // TODO fix having to write byte buffer twice
 
 					// Write our packet to send to the main memory stream
 					ms.WriteArray(BitConverter.GetBytes(ackArray.Length + 4));
@@ -435,6 +438,9 @@ namespace OpenRA.Network
 
 				WriteQueuedSyncPackets(ms);
 				SendNetwork(ms);
+
+				if (!UseNewNetcode)
+					AddPacket(new ReceivedPacket { FromClient = LocalClientId, Data = ms.ToArray() });
 			}
 			finally
 			{

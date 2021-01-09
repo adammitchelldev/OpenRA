@@ -214,6 +214,7 @@ namespace OpenRA.Server
 					ServerName = settings.Name,
 					EnableSingleplayer = settings.EnableSingleplayer || Type != ServerType.Dedicated,
 					EnableSyncReports = settings.EnableSyncReports,
+					UseNewNetcode = settings.UseNewNetcode,
 					GameUid = Guid.NewGuid().ToString(),
 					Dedicated = Type == ServerType.Dedicated
 				}
@@ -255,7 +256,7 @@ namespace OpenRA.Server
 
 					int localTimeout;
 
-					if (State == ServerState.GameStarted)
+					if (LobbyInfo.GlobalSettings.UseNewNetcode && State == ServerState.GameStarted)
 					{
 						localTimeout = serverGame.MillisToNextNetFrame * 1000;
 					}
@@ -298,7 +299,7 @@ namespace OpenRA.Server
 					foreach (var t in serverTraits.WithInterface<ITick>())
 						t.Tick(this);
 
-					if (State == ServerState.GameStarted)
+					if (LobbyInfo.GlobalSettings.UseNewNetcode && State == ServerState.GameStarted)
 					{
 						if (serverGame.TryTick(this))
 						{
@@ -838,7 +839,7 @@ namespace OpenRA.Server
 				// TODO: Find a less hacky way to deal with synchash relaying
 				DispatchOrdersToOtherClients(conn, frame, data, true);
 			}
-			else if (conn != null && State == ServerState.GameStarted)
+			else if (conn != null && LobbyInfo.GlobalSettings.UseNewNetcode && State == ServerState.GameStarted)
 			{
 				serverGame.OrderBuffer.BufferOrders(conn.PlayerIndex, data);
 			}
@@ -1096,8 +1097,16 @@ namespace OpenRA.Server
 
 					case "SlowDown":
 						{
-							var amount = int.Parse(o.TargetString);
-							serverGame.SlowDown(amount);
+							if (LobbyInfo.GlobalSettings.UseNewNetcode)
+							{
+								var amount = int.Parse(o.TargetString);
+								serverGame.SlowDown(amount);
+							}
+							else
+							{
+								Log.Write("server", "Received request to slow down from client {0} but not using new netcode!", conn.PlayerIndex);
+							}
+
 							break;
 						}
 				}
@@ -1311,9 +1320,13 @@ namespace OpenRA.Server
 				}
 
 				SyncLobbyInfo();
-				serverGame = new ServerGame(LobbyInfo.GlobalSettings.Timestep);
-				foreach (var c in Conns)
-					serverGame.OrderBuffer.AddClient(c.PlayerIndex);
+
+				if (LobbyInfo.GlobalSettings.UseNewNetcode)
+				{
+					serverGame = new ServerGame(LobbyInfo.GlobalSettings.Timestep);
+					foreach (var c in Conns)
+						serverGame.OrderBuffer.AddClient(c.PlayerIndex);
+				}
 
 				State = ServerState.GameStarted;
 

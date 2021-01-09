@@ -31,7 +31,8 @@ namespace OpenRA
 {
 	public static class Game
 	{
-		public const int DefaultNetTickScale = 1; // Net tick every world frame
+		public const int DefaultNetTickScale = 3; // 120ms net tick for 40ms timestep
+		public const int NewNetcodeNetTickScale = 1; // Net tick every world frame
 		public const int Timestep = 40;
 		public const int TimestepJankThreshold = 250; // Don't catch up for delays larger than 250ms
 

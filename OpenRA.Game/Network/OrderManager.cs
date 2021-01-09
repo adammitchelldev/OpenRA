@@ -35,7 +35,7 @@ namespace OpenRA.Network
 		public bool AuthenticationFailed = false;
 		public ExternalMod ServerExternalMod = null;
 
-		public int NetTickScale = Game.DefaultNetTickScale;
+		public int NetTickScale { get { return LobbyInfo.GlobalSettings.UseNewNetcode ? Game.NewNetcodeNetTickScale : Game.DefaultNetTickScale; } }
 		public bool IsNetTick { get { return LocalFrameNumber % NetTickScale == 0; } }
 		public int NetFrameNumber { get; private set; }
 		public int LocalFrameNumber;
@@ -100,10 +100,17 @@ namespace OpenRA.Network
 			// HACK: FramesAhead is only ever 0 in singleplayer, so we increase the rate of apparent net ticks to decrease latency
 			// if (OrderLatency == 0)
 			// 	NetTickScale = 1;
-
-			// Technically redundant since we will attempt to send orders before the next frame
-			// but gets our framesahead orders out sooner
-			SendOrders();
+			if (LobbyInfo.GlobalSettings.UseNewNetcode)
+			{
+				// Technically redundant since we will attempt to send orders before the next frame
+				// but gets our framesahead orders out sooner
+				SendOrders();
+			}
+			else
+			{
+				for (var i = 0; i < OrderLatency; ++i)
+					SendOrders();
+			}
 		}
 
 		public OrderManager(ConnectionTarget endpoint, string password, IConnection conn)
@@ -302,8 +309,11 @@ namespace OpenRA.Network
 					SendOrders();
 			}
 
-			// Sets catchup frames and asks server to slow down if they are too high
-			CompensateForLatency();
+			if (LobbyInfo.GlobalSettings.UseNewNetcode)
+			{
+				// Sets catchup frames and asks server to slow down if they are too high
+				CompensateForLatency();
+			}
 
 			SendImmediateOrders();
 
@@ -330,6 +340,20 @@ namespace OpenRA.Network
 		{
 			disposed = true;
 			Connection?.Dispose();
+		}
+
+		public void SyncLobbyInfo()
+		{
+			if (OrderLatency != LobbyInfo.GlobalSettings.OrderLatency && !GameStarted)
+			{
+				OrderLatency = LobbyInfo.GlobalSettings.OrderLatency;
+				Log.Write("server", "Order lag is now {0} frames.", LobbyInfo.GlobalSettings.OrderLatency);
+			}
+
+			if (Connection is NetworkConnection c)
+			{
+				c.UseNewNetcode = LobbyInfo.GlobalSettings.UseNewNetcode;
+			}
 		}
 	}
 

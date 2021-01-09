@@ -32,7 +32,7 @@ namespace OpenRA.Server
 		public ServerGame(int worldTimeStep)
 		{
 			CurrentNetFrame = 1;
-			NetTimestep = worldTimeStep * Game.DefaultNetTickScale; // TODO: Set net tick scale via lobby settings
+			NetTimestep = worldTimeStep * Game.NewNetcodeNetTickScale; // TODO: Set net tick scale via lobby settings
 			NextFrameTick = NetTimestep;
 			gameTimer = Stopwatch.StartNew();
 			OrderBuffer = new OrderBuffer();
