@@ -85,7 +85,6 @@ namespace OpenRA.Network
 
 			foreach (var client in LobbyInfo.Clients)
 			{
-				Console.WriteLine("Adding client {0}, isbot {1}".F(client.Index, client.IsBot));
 				if (!client.IsBot)
 					frameData.AddClient(client.Index);
 			}
@@ -108,7 +107,7 @@ namespace OpenRA.Network
 			}
 			else
 			{
-				for (var i = 0; i < OrderLatency; ++i)
+				for (var i = 0; i <= OrderLatency; ++i)
 					SendOrders();
 			}
 		}
@@ -237,11 +236,7 @@ namespace OpenRA.Network
 			if (!GameStarted)
 				return;
 
-			// Once every few net frames, should send a packet to the server to indicate which real frame we are on,
-			// and whether or not we think we are catching up.
-			// This way, server can stall the game for us if we are slowing down significantly, and it will also detect
-			// spiked where we were unable to do or say anything, even if we weren't sending orders.
-			if (GameSaveLastFrame < NetFrameNumber)
+			if (GameSaveLastFrame < NextOrderFrame)
 			{
 				Connection.Send(NextOrderFrame, localOrders.Select(o => o.Serialize()).ToList());
 				localOrders.Clear();

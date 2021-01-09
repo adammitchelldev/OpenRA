@@ -12,13 +12,11 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
-using OpenRA.Primitives;
 using OpenRA.Server;
 
 namespace OpenRA.Network
@@ -356,13 +354,13 @@ namespace OpenRA.Network
 			{
 				ms.WriteArray(BitConverter.GetBytes(frameReceived));
 
-				for (int i = 0; i < framesToAck; i++)
+				for (var i = 0; i < framesToAck; i++)
 				{
 					byte[] queuedPacket = default;
 					if (awaitingAckPackets.Count > 0 && !awaitingAckPackets.TryDequeue(out queuedPacket))
 					{
 						// The dequeing failed because of concurrency, so we retry
-						for (int c = 0; c < 5; c++)
+						for (var c = 0; c < 5; c++)
 						{
 							if (awaitingAckPackets.TryDequeue(out queuedPacket))
 							{
@@ -413,7 +411,8 @@ namespace OpenRA.Network
 					ms.Capacity = 8 + ordersLength;
 				}
 
-				if (orders.Count() > 0)
+				// Always write data for old netcode
+				if (orders.Count() > 0 || !UseNewNetcode)
 				{
 					// Write our packet to be acked
 					byte[] ackArray;
@@ -428,7 +427,19 @@ namespace OpenRA.Network
 					}
 
 					if (UseNewNetcode)
+					{
 						awaitingAckPackets.Enqueue(ackArray); // TODO fix having to write byte buffer twice
+					}
+					else
+					{
+						// Have to send data to self with frame information
+						using (var dataMs = new MemoryStream(ackArray.Length + 4))
+						{
+							dataMs.WriteArray(BitConverter.GetBytes(frame));
+							dataMs.WriteArray(ackArray);
+							AddPacket(new ReceivedPacket { FromClient = LocalClientId, Data = dataMs.GetBuffer() });
+						}
+					}
 
 					// Write our packet to send to the main memory stream
 					ms.WriteArray(BitConverter.GetBytes(ackArray.Length + 4));
@@ -438,9 +449,6 @@ namespace OpenRA.Network
 
 				WriteQueuedSyncPackets(ms);
 				SendNetwork(ms);
-
-				if (!UseNewNetcode)
-					AddPacket(new ReceivedPacket { FromClient = LocalClientId, Data = ms.ToArray() });
 			}
 			finally
 			{
