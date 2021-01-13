@@ -1110,9 +1110,7 @@ namespace OpenRA.Server
 								serverGame.SlowDown(amount);
 							}
 							else
-							{
 								Log.Write("server", "Received request to slow down from client {0} but not using new netcode!", conn.PlayerIndex);
-							}
 
 							break;
 						}
@@ -1120,13 +1118,9 @@ namespace OpenRA.Server
 					case "Loaded":
 						{
 							if (LobbyInfo.GlobalSettings.UseNewNetcode)
-							{
 								conn.Loaded = true;
-							}
 							else
-							{
 								Log.Write("server", "Received Loaded message from client {0} but not using new netcode!", conn.PlayerIndex);
-							}
 
 							break;
 						}
@@ -1351,9 +1345,7 @@ namespace OpenRA.Server
 					State = ServerState.GameLoading;
 				}
 				else
-				{
 					State = ServerState.GameStarted;
-				}
 
 				// TODO remove: this "pre-disconnecting" method adds unnecessary complexity just for the sake of the replay stream
 				/*var disconnectData = new[] { (byte)OrderType.Disconnect };
