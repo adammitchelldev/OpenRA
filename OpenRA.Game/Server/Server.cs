@@ -811,7 +811,6 @@ namespace OpenRA.Server
 			foreach (var c in Conns.Except(conn).ToList())
 				DispatchFrameToClient(c, frameData, buffer);
 
-			/*
 			if (recorder != null)
 			{
 				recorder.ReceiveFrame(from, frame, data);
@@ -824,7 +823,6 @@ namespace OpenRA.Server
 						Log.Write("server", "Dropped sync order with length {0} from client {1}. Expected length {2}.".F(data.Length, from, Order.SyncHashOrderLength));
 				}
 			}
-			*/
 
 			// TODO: Make this nicer
 			if (GameSave != null && conn != null)
@@ -849,8 +847,7 @@ namespace OpenRA.Server
 			if (frame == 0 && conn != null)
 			{
 				InterpretServerOrders(conn, data);
-				if (GameSave != null)
-					GameSave.DispatchOrders(conn, frame, data);
+				GameSave?.DispatchOrders(conn, frame, data);
 			}
 
 			// TODO: Find a less hacky way to deal with synchash relaying
@@ -868,11 +865,9 @@ namespace OpenRA.Server
 		{
 			var ms = new MemoryStream(allData.Select(d => d.Length).Sum());
 			foreach (var data in allData)
-			{
 				ms.WriteArray(data);
-			}
 
-			Connection conn = Conns.FirstOrDefault(c => c.PlayerIndex == fromClient);
+			var conn = Conns.FirstOrDefault(c => c.PlayerIndex == fromClient);
 			DispatchOrdersToOtherClients(conn, serverGame.CurrentNetFrame, ms.ToArray(), true);
 		}
 
@@ -886,7 +881,7 @@ namespace OpenRA.Server
 			writer.Write((byte)OrderType.Ack);
 			writer.Write((short)acks);
 
-			Connection conn = Conns.FirstOrDefault(c => c.PlayerIndex == forClient);
+			var conn = Conns.FirstOrDefault(c => c.PlayerIndex == forClient);
 
 			// Send acks to client from themselves
 			DispatchOrdersToClient(conn, forClient, serverGame.CurrentNetFrame, ms.ToArray(), true);
@@ -965,8 +960,7 @@ namespace OpenRA.Server
 						break;
 					case "Pong":
 						{
-							long pingSent;
-							if (!OpenRA.Exts.TryParseInt64Invariant(o.TargetString, out pingSent))
+							if (!OpenRA.Exts.TryParseInt64Invariant(o.TargetString, out var pingSent))
 							{
 								Log.Write("server", "Invalid order pong payload: {0}", o.TargetString);
 								break;
@@ -1186,8 +1180,7 @@ namespace OpenRA.Server
 							}
 						}
 
-						if (serverGame != null)
-							serverGame.OrderBuffer.DropClient(toDrop.PlayerIndex);
+						serverGame?.OrderBuffer.DropClient(toDrop.PlayerIndex);
 
 						DispatchServerCreatedOrdersToAllClients(toDrop, toDrop.MostRecentFrame, new[] { (byte)OrderType.Disconnect });
 
@@ -1357,17 +1350,6 @@ namespace OpenRA.Server
 					State = ServerState.GameStarted;
 					GameState = GameState.Playing;
 				}
-
-				// TODO remove: this "pre-disconnecting" method adds unnecessary complexity just for the sake of the replay stream
-				/*var disconnectData = new[] { (byte)OrderType.Disconnect };
-				foreach (var c in Conns)
-				{
-					foreach (var d in Conns)
-						DispatchOrdersToClient(c, d.PlayerIndex, int.MaxValue, disconnectData);
-
-					if (recorder != null)
-						recorder.ReceiveFrame(c.PlayerIndex, int.MaxValue, disconnectData);
-				}*/
 
 				if (GameSave == null && LobbyInfo.GlobalSettings.GameSavesEnabled)
 					GameSave = new GameSave();
