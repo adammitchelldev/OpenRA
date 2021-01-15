@@ -274,6 +274,8 @@ namespace OpenRA.Server
 					if (LobbyInfo.GlobalSettings.UseNewNetcode && State == ServerState.GameStarted)
 					{
 						localTimeout = serverGame.MillisToNextNetFrame * 1000;
+						if (localTimeout < 0)
+							localTimeout = 0;
 					}
 					else
 					{
