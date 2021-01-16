@@ -30,7 +30,7 @@ namespace OpenRA.Server
 
 		int slowdownHold;
 		int slowdownAmount;
-		public int AdjustedTimestep { get { return NetTimestep + slowdownAmount; } }
+		public int AdjustedTimestep { get { return NetTimestep + (slowdownAmount / 5); } }
 
 		public int MillisToNextNetFrame
 		{
@@ -75,7 +75,7 @@ namespace OpenRA.Server
 			if (slowdownAmount < amount)
 			{
 				slowdownAmount = amount;
-				slowdownHold = amount;
+				slowdownHold = 5;
 			}
 		}
 	}

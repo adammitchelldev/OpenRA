@@ -33,6 +33,8 @@ namespace OpenRA
 	{
 		public const int DefaultNetTickScale = 3; // 120ms net tick for 40ms timestep
 		public const int NewNetcodeNetTickScale = 1; // Net tick every world frame
+		public const int MaxNetworkSimLag = 200;
+		public const int MaxSimLagBeforeFrameDrops = 100;
 		public const int Timestep = 40;
 		public const int TimestepJankThreshold = 250; // Don't catch up for delays larger than 250ms
 		public const double NetCatchupFactor = 0.1;
@@ -595,17 +597,7 @@ namespace OpenRA
 				Cursor.Tick();
 			}
 
-			int worldTimestep;
-			if (world == null)
-				worldTimestep = Timestep;
-			else if (world.IsLoadingGameSave)
-				worldTimestep = 1;
-			else if (orderManager.IsStalling)
-				worldTimestep = 1;
-			else if (orderManager.CatchUpFrames > 0)
-				worldTimestep = (int)Math.Floor(world.Timestep / (1.0 + NetCatchupFactor * orderManager.CatchUpFrames)); // Smooth catchup
-			else
-				worldTimestep = world.Timestep;
+			var worldTimestep = orderManager.SuggestedTimestep;
 
 			var worldTickDelta = tick - orderManager.LastTickTime;
 			if (worldTimestep == 0 || worldTickDelta < worldTimestep)
@@ -613,12 +605,32 @@ namespace OpenRA
 
 			using (new PerfSample("tick_time"))
 			{
-				// Tick the world to advance the world time to match real time:
-				//    If dt < TickJankThreshold then we should try and catch up by repeatedly ticking
-				//    If dt >= TickJankThreshold then we should accept the jank and progress at the normal rate
-				// dt is rounded down to an integer tick count in order to preserve fractional tick components.
-				var integralTickTimestep = (worldTickDelta / worldTimestep) * worldTimestep;
-				orderManager.LastTickTime += integralTickTimestep >= TimestepJankThreshold ? integralTickTimestep : worldTimestep;
+				if (world == null || !orderManager.ShouldUseCatchUp || !orderManager.LobbyInfo.GlobalSettings.UseNewNetcode)
+				{
+					// Tick the world to advance the world time to match real time:
+					//    If dt < TickJankThreshold then we should try and catch up by repeatedly ticking
+					//    If dt >= TickJankThreshold then we should accept the jank and progress at the normal rate
+					// dt is rounded down to an integer tick count in order to preserve fractional tick components.
+					var integralTickTimestep = (worldTickDelta / worldTimestep) * worldTimestep;
+					orderManager.LastTickTime += integralTickTimestep >= TimestepJankThreshold ? integralTickTimestep : worldTimestep;
+				}
+				else if (!OrderManager.IsStalling)
+				{
+					var realDelta = (int)(tick - orderManager.LastRealTickTime);
+					orderManager.SimLag += realDelta - worldTimestep;
+					if (orderManager.SimLag < 0)
+						orderManager.SimLag = 0;
+
+					orderManager.LastTickTime += worldTimestep;
+					Console.WriteLine("tick: {0}, wd: {1}, rd: {2}, sl: {3}", tick, worldTickDelta, realDelta, orderManager.SimLag);
+				}
+				else
+				{
+					Console.WriteLine("stalled {0}", worldTimestep);
+					orderManager.LastTickTime += worldTimestep;
+				}
+
+				orderManager.LastRealTickTime = tick;
 
 				Sound.Tick();
 
@@ -799,23 +811,16 @@ namespace OpenRA
 			{
 				// Ideal time between logic updates. Timestep = 0 means the game is paused
 				// but we still call LogicTick() because it handles pausing internally.
-				var logicInterval = worldRenderer != null && worldRenderer.World.Timestep != 0 ? worldRenderer.World.Timestep : Timestep;
+				// var logicInterval = worldRenderer != null && worldRenderer.World.Timestep != 0 ? worldRenderer.World.Timestep : OrderManager.SuggestedTimestep;
+				var logicInterval = 1;
 
 				// Ideal time between screen updates
 				var maxFramerate = Settings.Graphics.CapFramerate ? Settings.Graphics.MaxFramerate.Clamp(1, 1000) : 1000;
 				var renderInterval = 1000 / maxFramerate;
 
-				if (OrderManager.IsStalling)
-					logicInterval = 1;
-
-				// TODO: limit rendering if we are taking too long to catch up
-				else if (OrderManager.CatchUpFrames > 0)
-					logicInterval = (int)Math.Floor(logicInterval / (1.0 + NetCatchupFactor * OrderManager.CatchUpFrames));
-
-				// Tick as fast as possible while restoring game saves, capping rendering at 5 FPS
+				// Whilst restoring game saves, cap rendering at 5 FPS
 				if (OrderManager.World != null && OrderManager.World.IsLoadingGameSave)
 				{
-					logicInterval = 1;
 					renderInterval = 200;
 				}
 
@@ -827,18 +832,20 @@ namespace OpenRA
 
 				// When's the next update (logic or render)
 				var nextUpdate = Math.Min(nextLogic, nextRender);
+
 				if (now >= nextUpdate)
 				{
 					var forceRender = renderBeforeNextTick || now >= forcedNextRender;
 
 					if (now >= nextLogic && !renderBeforeNextTick)
 					{
-						nextLogic += logicInterval;
+						// nextLogic += logicInterval;
+						nextLogic = now + logicInterval;
 
 						LogicTick();
 
 						// Force at least one render per tick during regular gameplay
-						if (!OrderManager.IsStalling && !(OrderManager.CatchUpFrames > 2) && OrderManager.World != null && !OrderManager.World.IsLoadingGameSave && !OrderManager.World.IsReplay)
+						if (!OrderManager.IsStalling && OrderManager.SimLag < MaxSimLagBeforeFrameDrops && OrderManager.World != null && !OrderManager.World.IsLoadingGameSave && !OrderManager.World.IsReplay)
 							renderBeforeNextTick = true;
 					}
 
